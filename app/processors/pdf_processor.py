@@ -1,8 +1,12 @@
 import pypdf
 from io import BytesIO
+import logging
 
 logger = logging.getLogger(__name__)
 
+#Extract text from PDF file
+#Args:file_contents: Raw PDF file bytes
+#Returns: Extracted text as a string
 async def parse_pdf(file_contents: bytes) -> str:
     try:
         # Create a file-like object
