@@ -3,6 +3,9 @@ from fastapi.responses import JSONResponse
 import logging
 from typing import Literal
 from app.models.response_models import DocumentResponse
+from app.processors.pdf_processor import parse_pdf
+from app.processors.docx_processor import parse_docx
+from app.processors.cleanup import clean_text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,6 +55,7 @@ async def process_document(
         if file.content_type == "application/pdf":
             logger.info(f"Processing PDF: {file.filename}")
             raw_text = await parse_pdf(contents)
+
         #process docx
         else:  
             logger.info(f"Processing DOCX: {file.filename}")
@@ -65,10 +69,8 @@ async def process_document(
             "filename": file.filename,
             "status": "success"
         }
-        
         if output_format in ["markdown", "both"]:
             response_data["markdown"] = cleaned["markdown"]
-        
         if output_format in ["json", "both"]:
             response_data["json_data"] = cleaned["json"]
         
@@ -81,9 +83,11 @@ async def process_document(
             status_code=500,
             detail=f"Failed to process document: {str(e)}"
         )
+    
     #Close file after processing
     finally:
         await file.close()
+
 
 @app.get("/health")
 async def health_check():
