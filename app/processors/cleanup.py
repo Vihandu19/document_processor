@@ -16,8 +16,11 @@ FIELD_LABELS = {
 #Returns: a dictionary with cleaned markdown and structured JSON data
 async def clean_text(raw_text: str) -> Dict[str, Any]:
     try:
+        #Normalize newlines from pdf -> plaintext extraction
+        text = normalize_newlines(raw_text)
+
         #Remove common headers/footers patterns
-        text = remove_headers_footers(raw_text)
+        text = remove_headers_footers(text)
         
         #Fix spacing and indentation
         text = fix_spacing(text)
@@ -43,6 +46,18 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to clean text: {str(e)}")
         raise ValueError(f"Could not clean text: {str(e)}")
+    
+
+#fix spurious line breaks in PDF text.
+#replace single newlines inside paragraphs with spaces. Keep double newlines as real paragraph breaks.
+def normalize_newlines(text: str) -> str:
+
+    #replace single newlines with space
+    text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+    
+    #normalize multiple empty lines to double newline
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    return text
 
 
 #Remove headers and footers from the text
@@ -89,32 +104,25 @@ def remove_headers_footers(text: str, header_lines: int = 2, footer_lines: int =
 #Args: text: The raw text extracted from the document
 #Returns: Cleaned text without headers and footers
 def fix_spacing(text: str) -> str:
-
-    #Replace multiple empty lines with a 2 empty line
+    # Replace multiple empty lines with exactly 2 newlines
     text = re.sub(r'\n{3,}', '\n\n', text)
-
-    #Remove trailing spaces at the end of lines
+    
+    # Remove trailing spaces at the end of lines
     text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
-
-    #Fix hyphenated words split across lines
-    text = re.sub(r'([A-Za-z]{2,})-\n([a-z]{2,})', r'\1\2',text)
-
-    #Normalize multiple spaces to single space, except in tables/code blocks
+    
+    # Fix hyphenated words split across lines
+    text = re.sub(r'([A-Za-z]{2,})-\n([a-z]{2,})', r'\1\2', text)
+    
+    # Normalize spaces on all lines (except empty lines)
     cleaned_lines = []
     for line in text.split("\n"):
-        # If it looks like a table or code block, dont touch spacing
-        if re.search(r'\s{2,}\S', line):     # table alignment
-            cleaned_lines.append(line)
-        elif line.strip().startswith(('{', '[', 'def ', 'class ', '//', '#')):
-            cleaned_lines.append(line)
-        else:
-            # safe space normalization
+        if line.strip():  # non-empty line
+            # Replace 2+ spaces with a single space
             line = re.sub(r' {2,}', ' ', line)
-            cleaned_lines.append(line)
+        cleaned_lines.append(line)
+    
+    return "\n".join(cleaned_lines).strip()
 
-    text = "\n".join(cleaned_lines)
-
-    return text.strip()
 
 
 #Determine if a line is likely a section heading using a scoring system
@@ -280,26 +288,29 @@ def create_json(sections: List[Dict[str, str]], full_text: str) -> Dict[str, Any
     for pattern in date_patterns:
         dates.extend(re.findall(pattern, full_text))
 
-    #Build and return JSON structure
-    return {
-    "sections": [
-        {
-            "heading": section.get("heading", "Untitled"),
-            "content": section.get("content", ""),
-            "word_count": len(section.get("content", "").split())
-        }
-        for section in sections
-    ],
-    "metadata": {
-        "total_sections": len(sections),
-        "word_count": word_count,
-        "character_count": char_count,
-        "emails_found": list(set(emails)),
-        "phones_found": list(set(phones)),
-        "dates_found": list(set(dates))[:10]
-    },
-    "summary": sections[0].get("content", "")[:200] + "..."
+    # Build JSON structure correctly
+    json_data = {
+        "sections": [
+            {
+                "heading": section.get("heading", "Untitled"),
+                "content": section.get("content", ""),
+                "word_count": len(section.get("content", "").split())
+            }
+            for section in sections
+        ],
+        "metadata": {
+            "total_sections": len(sections),
+            "word_count": word_count,
+            "character_count": char_count,
+            "emails_found": list(set(emails)),
+            "phones_found": list(set(phones)),
+            "dates_found": list(set(dates))[:10]
+        },
+        "summary": sections[0].get("content", "")[:200] + "..."
         if sections and sections[0].get("content")
         else "No content available"
     }
+
+    return json_data
+
     
