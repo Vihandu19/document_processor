@@ -27,7 +27,9 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
         
         #Convert to markdown
         markdown = convert_to_markdown(sections)
-        
+        if not sections:
+            sections = [{"heading": "Content", "content": text.strip()}]
+
         #Create JSON structure
         json_data = create_json(sections, text)
         
@@ -50,7 +52,7 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
     #footer_lines: Number of lines to consider as footer (default 1)
 #Returns: 
 #   Cleaned text without headers and footers
-def remove_headers_footers(text: str, header_lines: int = 1, footer_lines: int = 1) -> str:   
+def remove_headers_footers(text: str, header_lines: int = 2, footer_lines: int = 2) -> str:   
     date_patterns = [
     r'\b\d{1,2}/\d{1,2}/\d{4}\b',   # MM/DD/YYYY or DD/MM/YYYY
     r'\b\d{1,2}-\d{1,2}-\d{4}\b',   # MM-DD-YYYY or DD-MM-YYYY
@@ -162,7 +164,7 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
         score += 3
     
     #roman numeral headings (I., II., III., IV., etc.)
-    if re.match(r'^[IVX]+\.\s+[A-Z]', stripped):
+    if re.match(r'^[IVXLCDM]+\.\s+[A-Z]', stripped):
         score += 3
     
     #letter headings (A., B., C.)
@@ -186,7 +188,7 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
         score += 1
     
     #return true if score meets threshold
-    return score >= 4
+    return score >= 7
 
 
 #Identify document sections and headings using intelligent pattern matching
@@ -253,4 +255,51 @@ def convert_to_markdown(sections: List[Dict[str, str]]) -> str:
 
 
 #Create a JSON representation of the document structure
+#Args:
+#   sections: List of sections with headings and content
+#   full_text: The complete cleaned text
+#Returns:
+#   Structured JSON representation with metadata
 def create_json(sections: List[Dict[str, str]], full_text: str) -> Dict[str, Any]:
+    # Extract metadata
+    word_count = len(full_text.split())
+    char_count = len(full_text)
+    
+    # Detect email and phone patterns
+    emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', full_text)
+    phones = re.findall(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', full_text)
+    
+    # Detect dates in various formats
+    dates = []
+    date_patterns = [
+        r'\b\d{1,2}/\d{1,2}/\d{4}\b',   # MM/DD/YYYY
+        r'\b\d{1,2}-\d{1,2}-\d{4}\b',   # MM-DD-YYYY
+        r'\b\d{1,2}/\d{1,2}/\d{2}\b',   # MM/DD/YY
+        r'\b\d{1,2}-\d{1,2}-\d{2}\b',   # MM-DD-YY
+    ]
+    for pattern in date_patterns:
+        dates.extend(re.findall(pattern, full_text))
+
+    #Build and return JSON structure
+    return {
+    "sections": [
+        {
+            "heading": section.get("heading", "Untitled"),
+            "content": section.get("content", ""),
+            "word_count": len(section.get("content", "").split())
+        }
+        for section in sections
+    ],
+    "metadata": {
+        "total_sections": len(sections),
+        "word_count": word_count,
+        "character_count": char_count,
+        "emails_found": list(set(emails)),
+        "phones_found": list(set(phones)),
+        "dates_found": list(set(dates))[:10]
+    },
+    "summary": sections[0].get("content", "")[:200] + "..."
+        if sections and sections[0].get("content")
+        else "No content available"
+    }
+    

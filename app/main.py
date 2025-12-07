@@ -61,10 +61,15 @@ async def process_document(
         # Clean and structure the text
         cleaned = await clean_text(raw_text)
 
+        sections = cleaned.get("json", {}).get("sections", [])
+        logger.info(f"Found {len(sections)} sections: {[s['heading'] for s in sections]}")
+
         # Build response based on requested format
         response_data = {
             "filename": file.filename,
-            "status": "success"
+            "status": "success",
+            "markdown": "",     
+            "json_data": {}   
         }
         if output_format in ["markdown", "both"]:
             response_data["markdown"] = cleaned["markdown"]
