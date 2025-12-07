@@ -232,8 +232,25 @@ def identify_sections(text: str) -> List[Dict[str, str]]:
     
     return sections
 
-#convert structured sections to markdown format
+
+#convert structured sections to markdown format    
+# Args: sections: List of sections with headings and content
+# Returns: markdown-formatted text
 def convert_to_markdown(sections: List[Dict[str, str]]) -> str:
+    markdown_parts = []
+    
+    for section in sections:
+        heading = section.get("heading", "Section")
+        content = section.get("content", "")
+        
+        # Add heading with proper markdown syntax
+        markdown_parts.append(f"## {heading}\n")
+        
+        # Add content with proper spacing
+        markdown_parts.append(f"{content}\n")
+    
+    return "\n".join(markdown_parts).strip()
+
 
 #Create a JSON representation of the document structure
 def create_json(sections: List[Dict[str, str]], full_text: str) -> Dict[str, Any]:
