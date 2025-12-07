@@ -53,18 +53,7 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
 #preserves blank lines (critical for section detection) and those that look like headings.
 #args: text: The raw text extracted from the document
 #returns: text with normalized newlines
-
 def normalize_newlines(text: str) -> str:
-    """
-    Fix spurious line breaks in PDF text while preserving document structure
-    
-    Many PDFs extract with:
-    - Double spaces between words
-    - Single words or short phrases per line
-    - Blank lines with just spaces
-    
-    This function aggressively joins lines into paragraphs.
-    """
     import logging
     logger = logging.getLogger(__name__)
     
