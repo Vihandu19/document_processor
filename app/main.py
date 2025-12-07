@@ -53,6 +53,11 @@ async def process_document(
             logger.info(f"Processing PDF: {file.filename}")
             raw_text = await parse_pdf(contents)
 
+            # DEBUG: Log raw PDF extraction
+            logger.info(f"RAW PDF TEXT - First 300 chars: {raw_text[:300]}")
+            logger.info(f"RAW PDF TEXT - Newline count: {raw_text.count(chr(10))}")
+            logger.info(f"RAW PDF TEXT - Space count: {raw_text.count(' ')}")
+
         #process docx
         else:  
             logger.info(f"Processing DOCX: {file.filename}")

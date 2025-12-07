@@ -48,15 +48,98 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
         raise ValueError(f"Could not clean text: {str(e)}")
     
 
-#fix spurious line breaks in PDF text.
-#replace single newlines inside paragraphs with spaces. Keep double newlines as real paragraph breaks.
-def normalize_newlines(text: str) -> str:
+#fix spurious line breaks in text caused by pdf/docx extraction
+#joins lines that are clearly mid-sentence (no ending punctuation)
+#preserves blank lines (critical for section detection) and those that look like headings.
+#args: text: The raw text extracted from the document
+#returns: text with normalized newlines
 
-    #replace single newlines with space
-    text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+def normalize_newlines(text: str) -> str:
+    """
+    Fix spurious line breaks in PDF text while preserving document structure
     
-    #normalize multiple empty lines to double newline
-    text = re.sub(r'\n\s*\n', '\n\n', text)
+    Many PDFs extract with:
+    - Double spaces between words
+    - Single words or short phrases per line
+    - Blank lines with just spaces
+    
+    This function aggressively joins lines into paragraphs.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # STEP 1: Normalize spaces FIRST (double spaces → single space)
+    text = re.sub(r'  +', ' ', text)  # Replace 2+ spaces with single space
+    
+    # STEP 2: Remove lines that are just whitespace
+    lines = [line.strip() for line in text.split('\n')]
+    
+    # STEP 3: Filter out completely empty lines for now
+    non_empty_lines = [line for line in lines if line]
+    
+    logger.info(f"After space normalization: {len(non_empty_lines)} non-empty lines")
+    
+    # Known headings that should stay separate
+    known_headings = {
+        "Introduction", "Conclusion", "Summary", "Abstract", 
+        "References", "Discussion", "Methodology", "Results", 
+        "Findings", "Background", "Group Dynamics", "Reflection",
+        "Objectives", "Scope", "Limitations", "Recommendations", 
+        "Appendix", "Acknowledgements", "Future Work", "Literature Review"
+    }
+    
+    result = []
+    i = 0
+    
+    while i < len(non_empty_lines):
+        line = non_empty_lines[i]
+        
+        # Check if this is a known heading - keep separate
+        if line in known_headings:
+            logger.info(f"Found known heading: {line}")
+            result.append("")  # Blank line before heading
+            result.append(line)
+            result.append("")  # Blank line after heading
+            i += 1
+            continue
+        
+        # Start building a paragraph
+        paragraph = [line]
+        i += 1
+        
+        # Keep joining until we hit a heading or end
+        while i < len(non_empty_lines):
+            next_line = non_empty_lines[i]
+            
+            # Stop at known heading
+            if next_line in known_headings:
+                break
+            
+            # Stop at ALL CAPS (likely heading) - must be >2 chars
+            if next_line.isupper() and len(next_line) > 3 and ' ' in next_line:
+                break
+            
+            # Stop at numbered heading (1., 1.2, etc.)
+            if re.match(r'^\d+(\.\d+)*[\.)]\s+[A-Z]', next_line):
+                break
+            
+            # Otherwise, keep joining
+            paragraph.append(next_line)
+            i += 1
+        
+        # Join paragraph with spaces
+        joined = ' '.join(paragraph)
+        result.append(joined)
+    
+    # Join with double newlines (paragraph breaks)
+    text = '\n\n'.join(result)
+    
+    # Clean up excessive blank lines (3+ → 2)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    logger.info(f"normalize_newlines OUTPUT - First 300 chars: {text[:300]}")
+    logger.info(f"normalize_newlines OUTPUT - Newline count: {text.count(chr(10))}")
+    
     return text
 
 
@@ -134,9 +217,20 @@ def fix_spacing(text: str) -> str:
     #True if the line is likely a heading
 
 def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
+    known_headings = ["Reflection", "Group Dynamics", "Conclusion", "Introduction",
+                      "Abstract", "Summary", "Results", "Discussion",
+                      "Methodology", "Literature Review", "Findings",
+                      "Recommendations", "Appendix", "References",
+                      "Acknowledgements", "Background", "Objectives",
+                      "Scope", "Limitations", "Future Work"]
     score = 0
     stripped = line.strip()
 
+    #check against known headings
+    for x in known_headings:
+        if stripped.startswith(x):
+            return True
+        
     #must have some content
     if len(stripped) < 2:
         return False
@@ -196,7 +290,7 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
         score += 1
     
     #return true if score meets threshold
-    return score >= 7
+    return score >= 6
 
 
 #Identify document sections and headings using intelligent pattern matching
