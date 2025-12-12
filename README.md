@@ -4,28 +4,27 @@ This project provides a end-to-end solution for transforming unstructured or mes
 The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. Distinguish essential content (Body Text, Headings) from unwanted, repetitive noise (ex.Headers, Footers, and Page Numbers), allowing for intelligent content cleanup that goes far beyond rules based parsing.
 
 Prerequisites:
-    Python 3.8+
-    The required libraries must be installed ( pip install -r requirements.txt).
+- Python 3.8+
 
 Environment Activation
-    source venv/bin/activate
+- source venv/bin/activate
 
 Service Startup (API)
-    uvicorn app.main:app --reload 
-    The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
+- uvicorn app.main:app --reload 
+- The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
 
 model train (one file at a time due to lack of line shuffling)
-    python train_model.py --extract document.pdf
-    python train_model.py --auto-label pdf_features.json
-    python train_model.py --prepare pdf_features.json
+- python train_model.py --extract document.pdf
+- python train_model.py --auto-label pdf_features.json
+- python train_model.py --prepare pdf_features.json
     
-    open label_me.csv (google sheets) label columns
-    0:regular content
-    1:header/footer
-    2:section title/heading
-    save file as label_me.csv
+- open label_me.csv (google sheets) label columns
+0:regular content
+1:header/footer
+2:section title/heading
+save file as label_me.csv
     
-    python train_model.py --train label_me.csv
+-python train_model.py --train label_me.csv
 
 to-do:
 - train model for header/footer removal and section idenfitication
