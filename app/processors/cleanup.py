@@ -4,7 +4,6 @@ from typing import Dict, Any, List
 
 import regex
 
-
 logger = logging.getLogger(__name__)
 
 

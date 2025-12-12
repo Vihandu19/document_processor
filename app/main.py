@@ -1,8 +1,8 @@
+import logging
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
 from app.models.response_models import DocumentResponse
-
-import logging
 from typing import Literal
 
 from app.processors.pdf_processor import extract_and_parse_pdf

@@ -7,7 +7,6 @@ from typing import List, Dict, Any
 from itertools import groupby
 from io import BytesIO
 
-
 logger = logging.getLogger(__name__)
 
 

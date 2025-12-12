@@ -6,8 +6,8 @@ import argparse
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV 
-from sklearn.metrics import classification_report # <--- CRITICAL FIX: Missing import added
-from app.processors.pdf_processor import extract_and_parse_pdf # <--- Moved to top for standard practice
+from sklearn.metrics import classification_report 
+from app.processors.pdf_processor import extract_and_parse_pdf
 
 
 def prepare_labeling_csv(features_json_path: str, output_csv: str = "label_me.csv"):

@@ -3,15 +3,12 @@ Prerequisites:
     Python 3.8+
     The required libraries must be installed ( pip install -r requirements.txt).
 
-
 Environment Activation
     source venv/bin/activate
 
-
 Service Startup (API)
-        uvicorn app.main:app --reload 
-        The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
-
+    uvicorn app.main:app --reload 
+    The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
 
 model train (one file at a time due to lack of line shuffling):
     python train_model.py --extract document.pdf
@@ -26,9 +23,9 @@ model train (one file at a time due to lack of line shuffling):
     ***
     python train_model.py --train label_me.csv
 
-
 to-do:
-train model for header/footer removal and section idenfitication
+1. train model for header/footer removal and section idenfitication
+2. modify cleantext to use ml instead of rules based 
 
 Current issues:
 
