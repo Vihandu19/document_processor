@@ -24,7 +24,7 @@ model train (one file at a time due to lack of line shuffling)
 2:section title/heading
 save file as label_me.csv
     
--python train_model.py --train label_me.csv
+- python train_model.py --train label_me.csv
 
 to-do:
 - train model for header/footer removal and section idenfitication
