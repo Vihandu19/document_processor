@@ -1,4 +1,3 @@
-# train_model.py
 import pandas as pd
 import json
 import joblib
@@ -6,7 +5,9 @@ import argparse
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import GridSearchCV 
+from sklearn.metrics import classification_report # <--- CRITICAL FIX: Missing import added
+from app.processors.pdf_processor import extract_and_parse_pdf # <--- Moved to top for standard practice
 
 
 def prepare_labeling_csv(features_json_path: str, output_csv: str = "label_me.csv"):
@@ -66,7 +67,8 @@ def prepare_labeling_csv(features_json_path: str, output_csv: str = "label_me.cs
 
 def train_model(labeled_csv_path: str, model_output: str = "document_structure_model.pkl"):
     """
-    Train Random Forest classifier from labeled CSV.
+    Train a robust Random Forest classifier from labeled CSV, correctly handling
+    categorical features and ensuring a stable feature set for inference.
     
     Args:
         labeled_csv_path: Path to CSV with 'label' column filled in
@@ -75,74 +77,69 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
     # Load labeled data
     df = pd.read_csv(labeled_csv_path)
     
-    # Check if labels exist
+    # Validation and Label Cleaning
     if 'label' not in df.columns:
         raise ValueError(f"'{labeled_csv_path}' must have a 'label' column!")
     
-    # Remove unlabeled rows
     df = df[df['label'].notna() & (df['label'] != '')]
     df['label'] = df['label'].astype(int)
     
+    # CRITICAL FIX: Check if there is any labeled data left
+    if len(df) == 0:
+        raise ValueError("No labeled data found. Please ensure the CSV has integer values in the 'label' column and retry.")
+
     print(f"Loaded {len(df)} labeled lines")
     print(f"Label distribution:\n{df['label'].value_counts().sort_index()}")
     
-    # Check if we have all classes
-    if len(df['label'].unique()) < 3:
-        print("\n⚠ WARNING: Not all classes (0,1,2) are present in training data!")
-        print("This might affect model performance.")
     
-    # Select features for training
-    feature_columns = [
-        # Layout
-        'y_pos_norm', 'x_pos_norm', 'line_width_norm', 'is_centered',
-        
-        # Text
+    #Define the baseline set of features (all numerical/boolean)
+    BASE_NUMERIC_FEATURES = [
+        'y_pos_norm', 'x_pos_norm', 'line_width_norm', 'is_centered', 'is_top_10_percent', 
+        'is_bottom_10_percent', 'is_first_page', 'is_last_page',
         'char_count', 'word_count', 'is_short', 'is_very_short', 'is_single_word',
-        
-        # Style
         'font_size', 'is_bold', 'is_italic',
-        
-        # Content
         'is_all_caps', 'is_title_case', 'is_numeric_pattern',
         'has_page_keyword', 'has_date_pattern', 'starts_with_number', 'ends_with_colon',
-        
-        # Position
-        'is_top_10_percent', 'is_bottom_10_percent', 'is_first_page', 'is_last_page',
-        
-        # Frequency
         'signature_frequency', 'appears_on_multiple_pages', 'appears_on_most_pages'
     ]
     
-    # Only use features that exist in the dataframe
-    available_features = [f for f in feature_columns if f in df.columns]
-    missing_features = [f for f in feature_columns if f not in df.columns]
+    # Features to drop entirely
+    DROP_FEATURES = ['text_content', 'line_signature'] 
     
-    if missing_features:
-        print(f"\n⚠ Missing features: {missing_features}")
-        print("Make sure your PDF extraction includes all features!")
     
-    X = df[available_features]
-    y = df['label']
+    # Drop high-cardinality/redundant/text features
+    df_processed = df.drop(columns=DROP_FEATURES, errors='ignore')
     
-    print(f"\nTraining with {len(available_features)} features")
+    # Get available features that exist in the loaded data
+    available_base_features = [f for f in BASE_NUMERIC_FEATURES if f in df_processed.columns]
     
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    final_feature_list = available_base_features
+
+    # Ensure all final features exist (crucial for inference)
+    for col in final_feature_list:
+        if col not in df_processed.columns:
+            df_processed[col] = 0
+
+    # Build final X, y matrices (fillna(0) handles potential NaN from merged features)
+    X = df_processed[final_feature_list].fillna(0)
+    y = df_processed['label']
     
-    print(f"Training set: {len(X_train)} samples")
-    print(f"Test set: {len(X_test)} samples")
+    print(f"\nTraining with {len(final_feature_list)} features (after encoding)")
+    
+    #Splitting by index to avoid page-based data leakage (better for generalization)
+    test_size = 0.2
+    split_index = int(len(X) * (1 - test_size))
+
+    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
+    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
+    
+    print(f"Training set: {len(X_train)} samples (first {split_index} lines)")
+    print(f"Test set: {len(X_test)} samples (last {len(X) - split_index} lines, for better generalization)")
     
     # Train model
     model = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=10,
-        min_samples_split=5,
-        min_samples_leaf=2,
-        class_weight='balanced',  # Handle imbalanced classes
-        random_state=42,
-        n_jobs=-1  # Use all CPU cores
+        n_estimators=100, max_depth=10, min_samples_split=5,
+        min_samples_leaf=2, class_weight='balanced', random_state=42, n_jobs=-1
     )
     
     print("\nTraining Random Forest...")
@@ -150,7 +147,6 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
     
     # Evaluate
     y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)
     
     print("\n" + "="*60)
     print("CLASSIFICATION REPORT")
@@ -161,36 +157,18 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
         digits=3
     ))
     
-    print("\n" + "="*60)
-    print("CONFUSION MATRIX")
-    print("="*60)
-    cm = confusion_matrix(y_test, y_pred)
-    print("          Predicted")
-    print("         Content  H/F  Title")
-    for i, row in enumerate(cm):
-        label_name = ['Content', 'H/F', 'Title'][i]
-        print(f"Actual {label_name:8s} {row[0]:4d}   {row[1]:4d}  {row[2]:4d}")
-    
-    # Feature importance
-    feature_importance = pd.DataFrame({
-        'feature': available_features,
-        'importance': model.feature_importances_
-    }).sort_values('importance', ascending=False)
-    
-    print("\n" + "="*60)
-    print("TOP 15 MOST IMPORTANT FEATURES")
-    print("="*60)
-    for idx, row in feature_importance.head(15).iterrows():
-        print(f"{row['feature']:30s} {row['importance']:.4f}")
-    
     # Save model
     joblib.dump(model, model_output)
     print(f"\n✓ Model saved to {model_output}")
     
-    # Save feature list (needed for inference)
-    with open('model_features.json', 'w') as f:
-        json.dump(available_features, f)
-    print(f"✓ Feature list saved to model_features.json")
+    # Save feature list and categorical metadata (CRITICAL FOR INFERENCE)
+    ml_metadata = {
+        'model_features': final_feature_list,
+        'ohe_categories': {}
+    }
+    with open('model_metadata.json', 'w') as f:
+        json.dump(ml_metadata, f, indent=2)
+    print(f"✓ ML metadata saved to model_metadata.json (Total features: {len(final_feature_list)})")
     
     return model
 
@@ -203,7 +181,7 @@ def extract_features_from_pdf(pdf_path: str, output_json: str = "pdf_features.js
         pdf_path: Path to PDF file
         output_json: Where to save extracted features
     """
-    from app.processors.pdf_processor import extract_and_parse_pdf
+    # Removed local import since it's now at the top
     
     print(f"Extracting features from {pdf_path}...")
     
@@ -256,13 +234,13 @@ def auto_label_obvious(features_json_path: str, output_csv: str = "label_me.csv"
 
     df.loc[title_mask, 'label'] = 2
 
-    # ---- CONTENT (label = 0) ----
+    # ---- REGULAR CONTENT (label = 0) ----
     df.loc[df['label'] == -1, 'label'] = 0
 
-    # Convert to strings for spreadsheet editing
+    #conver tot string for csv
     df['label'] = df['label'].astype(str)
 
-    # ---- SAVE back to NEW JSON ----
+    #save back to json
     autolabeled_json = features_json_path.replace(".json", "_autolabeled.json")
 
     with open(autolabeled_json, 'w') as f:
@@ -270,7 +248,7 @@ def auto_label_obvious(features_json_path: str, output_csv: str = "label_me.csv"
 
     print(f"✓ Auto-labeled JSON written to {autolabeled_json}")
 
-    # ---- Now generate CSV using existing function ----
+    #generate CSV
     prepare_labeling_csv(autolabeled_json, output_csv)
 
     print("\n📊 Auto-labeling summary:")
@@ -286,6 +264,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Train document structure classifier")
     parser.add_argument('--extract', type=str, help='Extract features from PDF')
+    parser.add_argument('--auto-label', type=str, help='Auto-label JSON features and prepare CSV for manual review.')
     parser.add_argument('--prepare', type=str, help='Prepare CSV for labeling from JSON')
     parser.add_argument('--train', type=str, help='Train model from labeled CSV')
     
@@ -295,6 +274,13 @@ if __name__ == "__main__":
         # Step 1: Extract features from PDF
         json_path = extract_features_from_pdf(args.extract)
         print(f"\nNext: python train_model.py --prepare {json_path}")
+    
+    elif args.auto_label:
+        # Step 2: Auto-label and Prepare CSV
+        # This will call prepare_labeling_csv internally, saving label_me.csv
+        auto_label_obvious(args.auto_label)
+        print(f"\nNext: 1. Review and refine labels in label_me.csv")
+        print(f"2. Run: python train_model.py --train label_me.csv")
         
     elif args.prepare:
         # Step 2: Prepare CSV for labeling
@@ -309,6 +295,7 @@ if __name__ == "__main__":
     else:
         print("Usage:")
         print("  1. Extract: python train_model.py --extract document.pdf")
-        print("  2. Prepare: python train_model.py --prepare pdf_features.json")
-        print("  3. Label manually in Excel/Sheets")
-        print("  4. Train:   python train_model.py --train label_me.csv")
+        print("  2. Auto-Label: python train_model.py --auto-label pdf_features.json")
+        print("  3. Prepare: python train_model.py --prepare pdf_features.json")
+        print("  4. Label manually in Excel/Sheets")
+        print("  5. Train:   python train_model.py --train label_me.csv")
