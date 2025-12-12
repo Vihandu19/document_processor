@@ -14,7 +14,7 @@ Service Startup (API)
     uvicorn app.main:app --reload 
     The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
 
-model train (one file at a time due to lack of line shuffling):
+model train (one file at a time due to lack of line shuffling)
     python train_model.py --extract document.pdf
     python train_model.py --auto-label pdf_features.json
     python train_model.py --prepare pdf_features.json
