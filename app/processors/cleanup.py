@@ -1,51 +1,72 @@
-
-import regex
 import logging
 from typing import Dict, Any, List
 
+import regex
+
 logger = logging.getLogger(__name__)
 
-FIELD_LABELS = {
-    "total", "amount", "email", "address", "phone", "date", "invoice",
-    "subtotal", "tax", "balance", "signature", "name", "price", "qty",
-    "quantity", "description", "item", "payment", "due", "from", "to",
-    "subject", "re", "cc", "bcc", "attn", "attention"
-    }
 
-#Clean and structure raw extracted text from documents
+#reconstruct text from line-level features
+def reconstruct_text_from_features(lines: List[Dict[str, Any]],
+    remove_headers: bool = False) -> str:
+    """
+    Rebuilds text from line-level PDF features.
+    Removes repeated headers/footers using signature frequency.
+    """
+    if not lines:
+        return ""
+
+    # Count signature frequencies to detect repeated header/footer lines
+    signature_counts = {}
+    for ln in lines:
+        sig = ln["line_signature"]
+        signature_counts[sig] = signature_counts.get(sig, 0) + 1
+
+    # Repeated lines likely headers/footers (appear on most pages)
+    total_pages = max(ln["page_num"] for ln in lines)
+    threshold = max(2, total_pages * 0.6)   # appears in 60%+ of pages
+
+    header_footer_signatures = {
+        sig for sig, count in signature_counts.items() if count >= threshold
+    } if remove_headers else set() 
+
+    # Sort lines top->bottom and left->right
+    lines_sorted = sorted(
+        lines,
+        key=lambda ln: (ln["page_num"], ln["y_pos_abs"], ln["x0"])
+    )
+
+    # Build output text while skipping H/F
+    output_lines = []
+    for ln in lines_sorted:
+        if ln["line_signature"] in header_footer_signatures:
+            continue
+        output_lines.append(ln["text_content"])
+
+    return "\n".join(output_lines)
+
+
 async def clean_text(raw_text: str) -> Dict[str, Any]:
+    """
+    Alternative clean_text function that uses reconstruct_text_from_features.
+    """
     try:
-        
         text = normalize_newlines(raw_text)
-
-        
-        text = remove_headers_footers(text)
-        
-        
         text = fix_spacing(text)
-        
-        
         sections = identify_sections(text)
-        
-        
         markdown = convert_to_markdown(sections)
         if not sections:
             sections = [{"heading": "Content", "content": text.strip()}]
-
-       
         json_data = create_json(sections, text)
-        
-        logger.info("Successfully cleaned and structured text")
-        
+        logger.info("Successfully cleaned and structured text (alt method)")
         return {
             "markdown": markdown,
             "json": json_data
         }
-    
     except Exception as e:
-        logger.error(f"Failed to clean text: {str(e)}")
+        logger.error(f"Failed to clean text (alt method): {str(e)}")
         raise ValueError(f"Could not clean text: {str(e)}")
-    
+
 
 #Normalize newlines and intelligently join/split lines
 def normalize_newlines(text: str) -> str:
@@ -191,6 +212,12 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
                       "Recommendations", "Appendix", "References",
                       "Acknowledgements", "Background", "Objectives",
                       "Scope", "Limitations", "Future Work"]
+    feild_labels = {
+    "total", "amount", "email", "address", "phone", "date", "invoice",
+    "subtotal", "tax", "balance", "signature", "name", "price", "qty",
+    "quantity", "description", "item", "payment", "due", "from", "to",
+    "subject", "re", "cc", "bcc", "attn", "attention"
+    }
     score = 0
     stripped = line.strip()
 
@@ -204,7 +231,7 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
         return False
     
     #reject all feild labels
-    if stripped.lower().rstrip(':') in FIELD_LABELS:
+    if stripped.lower().rstrip(':') in feild_labels:
         return False
     
     #reject lines in the format "label: value"
@@ -358,9 +385,6 @@ def create_json(sections: List[Dict[str, str]], full_text: str) -> Dict[str, Any
             "phones_found": list(set(phones)),
             "dates_found": list(set(dates))[:10]
         },
-        "summary": sections[0].get("content", "")[:200] + "..."
-        if sections and sections[0].get("content")
-        else "No content available"
     }
 
     return json_data

@@ -1,14 +1,18 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
+from app.models.response_models import DocumentResponse
+
 import logging
 from typing import Literal
-from app.models.response_models import DocumentResponse
-from app.processors.pdf_processor import parse_pdf
+
+from app.processors.pdf_processor import extract_and_parse_pdf
 from app.processors.docx_processor import parse_docx
-from app.processors.cleanup import clean_text
+from app.processors.cleanup import clean_text,reconstruct_text_from_features
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 app = FastAPI(
     title="Document Cleanup API",
@@ -17,7 +21,6 @@ app = FastAPI(
 )
 
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
-
 
 
 @app.post("/process", response_model=DocumentResponse)
@@ -34,7 +37,7 @@ async def process_document(
     output_format: Choose 'markdown', 'json', or 'both'
     # Validate file type
     """""
-    
+
     allowed_types = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
     if file.content_type not in allowed_types:
         raise HTTPException(
@@ -55,8 +58,8 @@ async def process_document(
         #process pdf
         if file.content_type == "application/pdf":
             logger.info(f"Processing PDF: {file.filename}")
-            raw_text = await parse_pdf(contents)
-
+            raw_lines =  extract_and_parse_pdf(contents)
+            raw_text = reconstruct_text_from_features(raw_lines)
             # DEBUG: Log raw PDF extraction
             logger.info(f"RAW PDF TEXT - First 300 chars: {raw_text[:300]}")
             logger.info(f"RAW PDF TEXT - Newline count: {raw_text.count(chr(10))}")
