@@ -1,4 +1,9 @@
-# document_processor
+# document_processor:
+This project provides a end-to-end solution for transforming unstructured or messy documents (specifically PDFs and DOCX files) into clean, structured data formats (json and markdown) suitable for downstream applications like search indexing, data extraction, and analysis.
+
+The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text (distinguish essential content ex. Body Text, Headings from unwanted, repetitive noise ex.Headers, Footers, and Page Numbers), allowing for intelligent content cleanup that goes far beyond simple rules.
+
+
 Prerequisites:
     Python 3.8+
     The required libraries must be installed ( pip install -r requirements.txt).
