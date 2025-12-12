@@ -13,14 +13,13 @@ from app.processors.cleanup import clean_text,reconstruct_text_from_features
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 app = FastAPI(
     title="Document Cleanup API",
     description="Clean and structure messy PDFs and DOCX files",
-    version="1.0.0"
+    version="0.1.3"
 )
-
-MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
 @app.post("/process", response_model=DocumentResponse)
@@ -60,10 +59,14 @@ async def process_document(
             logger.info(f"Processing PDF: {file.filename}")
             raw_lines =  extract_and_parse_pdf(contents)
             raw_text = reconstruct_text_from_features(raw_lines)
-            # DEBUG: Log raw PDF extraction
-            logger.info(f"RAW PDF TEXT - First 300 chars: {raw_text[:300]}")
-            logger.info(f"RAW PDF TEXT - Newline count: {raw_text.count(chr(10))}")
-            logger.info(f"RAW PDF TEXT - Space count: {raw_text.count(' ')}")
+
+            if not isinstance(raw_text, list):
+                raise ValueError("Feature extractor did not return a list")
+
+            # DEBUG: 
+            #logger.info(f"RAW PDF TEXT - First 300 chars: {raw_text[:300]}")
+            #logger.info(f"RAW PDF TEXT - Newline count: {raw_text.count(chr(10))}")
+            #logger.info(f"RAW PDF TEXT - Space count: {raw_text.count(' ')}")
 
         #process docx
         else:  

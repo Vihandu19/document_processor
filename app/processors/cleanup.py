@@ -1,7 +1,9 @@
 import logging
+import time
 from typing import Dict, Any, List
 
 import regex
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,7 @@ def reconstruct_text_from_features(lines: List[Dict[str, Any]],
     Rebuilds text from line-level PDF features.
     Removes repeated headers/footers using signature frequency.
     """
+    start_time = time.perf_counter()
     if not lines:
         return ""
 
@@ -58,20 +61,22 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
         if not sections:
             sections = [{"heading": "Content", "content": text.strip()}]
         json_data = create_json(sections, text)
-        logger.info("Successfully cleaned and structured text (alt method)")
+
+        end_time = time.perf_counter()
+        logger.info(f"Successfully cleaned and structured text (alt method) in {end_time:.3f}s")
+
         return {
             "markdown": markdown,
             "json": json_data
         }
     except Exception as e:
-        logger.error(f"Failed to clean text (alt method): {str(e)}")
+        end_time = time.perf_counter()
+        logger.error(f"Failed to clean text (alt method)in {end_time:.3f}: {str(e)}")
         raise ValueError(f"Could not clean text: {str(e)}")
 
 
 #Normalize newlines and intelligently join/split lines
 def normalize_newlines(text: str) -> str:
-    import logging
-    logger = logging.getLogger(__name__)
 
     known_headings = {
         "Introduction", "Conclusion", "Summary", "Abstract", 
@@ -141,8 +146,8 @@ def normalize_newlines(text: str) -> str:
     # Clean up excessive blank lines (3+ → 2)
     text = regex.sub(r'\n{3,}', '\n\n', text)
     
-    logger.info(f"normalize_newlines OUTPUT - First 300 chars: {text[:300]}")
-    logger.info(f"normalize_newlines OUTPUT - Newline count: {text.count(chr(10))}")
+    #logger.info(f"normalize_newlines OUTPUT - First 300 chars: {text[:300]}")
+    #logger.info(f"normalize_newlines OUTPUT - Newline count: {text.count(chr(10))}")
     
     return text
 
