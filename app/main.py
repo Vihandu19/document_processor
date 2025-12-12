@@ -19,18 +19,22 @@ app = FastAPI(
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
-#Process and clean a document (PDF or DOCX)
-#input_formate: Upload PDF or DOCX file
-#output_format: Choose 'markdown', 'json', or 'both'
+
 @app.post("/process", response_model=DocumentResponse)
 async def process_document(
     file: UploadFile = File(...),
     output_format: Literal["markdown", "json", "both"] = Query(
         default="markdown",
         description="Output format preference"
-    )
-):
+    )):
+
+    """
+    Process and clean a document (PDF or DOCX)
+    input_formate: Upload PDF or DOCX file
+    output_format: Choose 'markdown', 'json', or 'both'
     # Validate file type
+    """""
+    
     allowed_types = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
     if file.content_type not in allowed_types:
         raise HTTPException(

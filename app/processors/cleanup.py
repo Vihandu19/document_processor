@@ -1,4 +1,5 @@
-import re
+
+import regex
 import logging
 from typing import Dict, Any, List
 
@@ -11,29 +12,27 @@ FIELD_LABELS = {
     "subject", "re", "cc", "bcc", "attn", "attention"
     }
 
-#Clean and structure raw text extracted from documents
-#Args: raw_text: The unprocessed text extracted from a document
-#Returns: a dictionary with cleaned markdown and structured JSON data
+#Clean and structure raw extracted text from documents
 async def clean_text(raw_text: str) -> Dict[str, Any]:
     try:
-        #Normalize newlines from pdf -> plaintext extraction
+        
         text = normalize_newlines(raw_text)
 
-        #Remove common headers/footers patterns
+        
         text = remove_headers_footers(text)
         
-        #Fix spacing and indentation
+        
         text = fix_spacing(text)
         
-        #Identify structure (sections, headings)
+        
         sections = identify_sections(text)
         
-        #Convert to markdown
+        
         markdown = convert_to_markdown(sections)
         if not sections:
             sections = [{"heading": "Content", "content": text.strip()}]
 
-        #Create JSON structure
+       
         json_data = create_json(sections, text)
         
         logger.info("Successfully cleaned and structured text")
@@ -48,27 +47,11 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
         raise ValueError(f"Could not clean text: {str(e)}")
     
 
-#fix spurious line breaks in text caused by pdf/docx extraction
-#joins lines that are clearly mid-sentence (no ending punctuation)
-#preserves blank lines (critical for section detection) and those that look like headings.
-#args: text: The raw text extracted from the document
-#returns: text with normalized newlines
+#Normalize newlines and intelligently join/split lines
 def normalize_newlines(text: str) -> str:
     import logging
     logger = logging.getLogger(__name__)
-    
-    # STEP 1: Normalize spaces FIRST (double spaces → single space)
-    text = re.sub(r'  +', ' ', text)  # Replace 2+ spaces with single space
-    
-    # STEP 2: Remove lines that are just whitespace
-    lines = [line.strip() for line in text.split('\n')]
-    
-    # STEP 3: Filter out completely empty lines for now
-    non_empty_lines = [line for line in lines if line]
-    
-    logger.info(f"After space normalization: {len(non_empty_lines)} non-empty lines")
-    
-    # Known headings that should stay separate
+
     known_headings = {
         "Introduction", "Conclusion", "Summary", "Abstract", 
         "References", "Discussion", "Methodology", "Results", 
@@ -76,6 +59,17 @@ def normalize_newlines(text: str) -> str:
         "Objectives", "Scope", "Limitations", "Recommendations", 
         "Appendix", "Acknowledgements", "Future Work", "Literature Review"
     }
+    
+    #Normalize spaces 
+    text = regex.sub(r'  +', ' ', text)
+    
+    #remove lines that are just whitespace
+    lines = [line.strip() for line in text.split('\n')]
+    
+    # Filter out completely empty lines for now
+    non_empty_lines = [line for line in lines if line]
+    
+    logger.info(f"After space normalization: {len(non_empty_lines)} non-empty lines")
     
     result = []
     i = 0
@@ -109,7 +103,7 @@ def normalize_newlines(text: str) -> str:
                 break
             
             # Stop at numbered heading (1., 1.2, etc.)
-            if re.match(r'^\d+(\.\d+)*[\.)]\s+[A-Z]', next_line):
+            if regex.match(r'^\d+(\.\d+)*[\.)]\s+[A-Z]', next_line):
                 break
             
             # Otherwise, keep joining
@@ -124,7 +118,7 @@ def normalize_newlines(text: str) -> str:
     text = '\n\n'.join(result)
     
     # Clean up excessive blank lines (3+ → 2)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = regex.sub(r'\n{3,}', '\n\n', text)
     
     logger.info(f"normalize_newlines OUTPUT - First 300 chars: {text[:300]}")
     logger.info(f"normalize_newlines OUTPUT - Newline count: {text.count(chr(10))}")
@@ -132,13 +126,7 @@ def normalize_newlines(text: str) -> str:
     return text
 
 
-#Remove headers and footers from the text
-#Args:
-    #text: The raw text extracted from the document
-    #header_lines: Number of lines to consider as header (default 1)
-    #footer_lines: Number of lines to consider as footer (default 1)
-#Returns: 
-#   Cleaned text without headers and footers
+#Remove headers and footers including dates and page numbers
 def remove_headers_footers(text: str, header_lines: int = 2, footer_lines: int = 2) -> str:   
     date_patterns = [
     r'\b\d{1,2}/\d{1,2}/\d{4}\b',   # MM/DD/YYYY or DD/MM/YYYY
@@ -163,9 +151,9 @@ def remove_headers_footers(text: str, header_lines: int = 2, footer_lines: int =
     for i, line in enumerate(lines):
         if i < header_lines or i >= len(lines) - footer_lines:
             for pattern in date_patterns:
-                line = re.sub(pattern, '', line, flags=re.IGNORECASE)
+                line = regex.sub(pattern, '', line, flags=regex.IGNORECASE)
             for pattern in page_patterns:
-                line = re.sub(pattern, '', line, flags=re.IGNORECASE)
+                line = regex.sub(pattern, '', line, flags=regex.IGNORECASE)
             line = line.strip()  # remove leftover spaces
         cleaned_lines.append(line)
     text = "\n".join(cleaned_lines)
@@ -173,24 +161,22 @@ def remove_headers_footers(text: str, header_lines: int = 2, footer_lines: int =
 
 
 #fix spacing issues without destroying formatting, tables, or real hyphens.
-#Args: text: The raw text extracted from the document
-#Returns: Cleaned text without headers and footers
 def fix_spacing(text: str) -> str:
     # Replace multiple empty lines with exactly 2 newlines
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = regex.sub(r'\n{3,}', '\n\n', text)
     
     # Remove trailing spaces at the end of lines
-    text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
+    text = regex.sub(r'[ \t]+$', '', text, flags=regex.MULTILINE)
     
     # Fix hyphenated words split across lines
-    text = re.sub(r'([A-Za-z]{2,})-\n([a-z]{2,})', r'\1\2', text)
+    text = regex.sub(r'([A-Za-z]{2,})-\n([a-z]{2,})', r'\1\2', text)
     
     # Normalize spaces on all lines (except empty lines)
     cleaned_lines = []
     for line in text.split("\n"):
         if line.strip():  # non-empty line
             # Replace 2+ spaces with a single space
-            line = re.sub(r' {2,}', ' ', line)
+            line = regex.sub(r' {2,}', ' ', line)
         cleaned_lines.append(line)
     
     return "\n".join(cleaned_lines).strip()
@@ -198,13 +184,6 @@ def fix_spacing(text: str) -> str:
 
 
 #Determine if a line is likely a section heading using a scoring system
-#Args:
-#   line: The line to evaluate
-#   prev_blank: Whether the previous line was blank
-#   next_blank: Whether the next line is blank
-#Returns:
-    #True if the line is likely a heading
-
 def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
     known_headings = ["Reflection", "Group Dynamics", "Conclusion", "Introduction",
                       "Abstract", "Summary", "Results", "Discussion",
@@ -229,15 +208,15 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
         return False
     
     #reject lines in the format "label: value"
-    if re.match(r'^[A-Za-z\s]+:\s+[\w\d@.]', stripped):
+    if regex.match(r'^[A-Za-z\s]+:\s+[\w\d@.]', stripped):
         return False
 
     #reject bullet points
-    if re.match(r'^[-•*]\s+', stripped):
+    if regex.match(r'^[-•*]\s+', stripped):
         return False
     
     #reject table like rows
-    if re.search(r'\S\s{2,}\S', stripped):
+    if regex.search(r'\S\s{2,}\S', stripped):
         return False
     if '|' in stripped and stripped.count('|') >= 2:
         return False
@@ -251,15 +230,15 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
         score += 2
     
     # numbered headings (1. or 1.2 or 1.2.3)
-    if re.match(r'^\d+(\.\d+)*[\.)]\s+[A-Z]', stripped):
+    if regex.match(r'^\d+(\.\d+)*[\.)]\s+[A-Z]', stripped):
         score += 3
     
     #roman numeral headings (I., II., III., IV., etc.)
-    if re.match(r'^[IVXLCDM]+\.\s+[A-Z]', stripped):
+    if regex.match(r'^[IVXLCDM]+\.\s+[A-Z]', stripped):
         score += 3
     
     #letter headings (A., B., C.)
-    if re.match(r'^[A-Z]\.\s+', stripped) and len(stripped.split()) <= 8:
+    if regex.match(r'^[A-Z]\.\s+', stripped) and len(stripped.split()) <= 8:
         score += 2
     
     #lines ending with ":" that look like headings
@@ -274,17 +253,14 @@ def is_potential_heading(line: str, prev_blank: bool, next_blank: bool) -> bool:
     elif prev_blank:
         score += 1
     
-    #short line (common for headings)
+    #short line
     if len(stripped) <= 60:
         score += 1
     
-    #return true if score meets threshold
     return score >= 6
 
 
-#Identify document sections and headings using intelligent pattern matching
-#Args: text: The cleaned text to analyze
-#Returns: List of sections with headings and content
+#Identify document sections and headings using  pattern matching
 def identify_sections(text: str) -> List[Dict[str, str]]:
     lines = text.split('\n')
     sections = []
@@ -293,7 +269,7 @@ def identify_sections(text: str) -> List[Dict[str, str]]:
     for i, raw_line in enumerate(lines):
         line = raw_line.rstrip()  # Preserve indentation on left side
         
-        if not line.strip():  # Empty line
+        if not line.strip():  
             current_section["content"].append("")
             continue
         
@@ -327,8 +303,6 @@ def identify_sections(text: str) -> List[Dict[str, str]]:
 
 
 #convert structured sections to markdown format    
-# Args: sections: List of sections with headings and content
-# Returns: markdown-formatted text
 def convert_to_markdown(sections: List[Dict[str, str]]) -> str:
     markdown_parts = []
     
@@ -346,19 +320,14 @@ def convert_to_markdown(sections: List[Dict[str, str]]) -> str:
 
 
 #Create a JSON representation of the document structure
-#Args:
-#   sections: List of sections with headings and content
-#   full_text: The complete cleaned text
-#Returns:
-#   Structured JSON representation with metadata
 def create_json(sections: List[Dict[str, str]], full_text: str) -> Dict[str, Any]:
     # Extract metadata
     word_count = len(full_text.split())
     char_count = len(full_text)
     
     # Detect email and phone patterns
-    emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', full_text)
-    phones = re.findall(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', full_text)
+    emails = regex.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', full_text)
+    phones = regex.findall(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', full_text)
     
     # Detect dates in various formats
     dates = []
@@ -369,7 +338,7 @@ def create_json(sections: List[Dict[str, str]], full_text: str) -> Dict[str, Any
         r'\b\d{1,2}-\d{1,2}-\d{2}\b',   # MM-DD-YY
     ]
     for pattern in date_patterns:
-        dates.extend(re.findall(pattern, full_text))
+        dates.extend(regex.findall(pattern, full_text))
 
     # Build JSON structure correctly
     json_data = {
