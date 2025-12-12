@@ -18,7 +18,7 @@ MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 app = FastAPI(
     title="Document Cleanup API",
     description="Clean and structure messy PDFs and DOCX files",
-    version="0.1.3"
+    version="0.2.0"
 )
 
 
