@@ -14,7 +14,6 @@ def reconstruct_text_from_features(lines: List[Dict[str, Any]],
     Rebuilds text from line-level PDF features.
     Removes repeated headers/footers using signature frequency.
     """
-    start_time = time.perf_counter()
     if not lines:
         return ""
 
@@ -52,6 +51,7 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
     """
     Alternative clean_text function that uses reconstruct_text_from_features.
     """
+    start_time = time.perf_counter()
     try:
         text = normalize_newlines(raw_text)
         text = fix_spacing(text)
@@ -62,7 +62,7 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
         json_data = create_json(sections, text)
 
         end_time = time.perf_counter()
-        logger.info(f"Successfully cleaned and structured text (alt method) in {end_time:.3f}s")
+        logger.info(f"Successfully cleaned and structured text (alt method) in {end_time-start_time:.3f}s")
 
         return {
             "markdown": markdown,
@@ -70,7 +70,7 @@ async def clean_text(raw_text: str) -> Dict[str, Any]:
         }
     except Exception as e:
         end_time = time.perf_counter()
-        logger.error(f"Failed to clean text (alt method)in {end_time:.3f}: {str(e)}")
+        logger.error(f"Failed to clean text (alt method)in {end_time-start_time:.3f}: {str(e)}")
         raise ValueError(f"Could not clean text: {str(e)}")
 
 

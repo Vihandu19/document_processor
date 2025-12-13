@@ -13,18 +13,19 @@ Service Startup (API)
 - uvicorn app.main:app --reload 
 - The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
 
-model train (one file at a time due to lack of line shuffling)
-- python train_model.py --extract document.pdf
-- python train_model.py --auto-label pdf_features.json
-- python train_model.py --prepare pdf_features.json
+model train (ideally 1-50 pages and 200-1k lines)
+1. python3 train_model.py --extract training_docs/document.pdf
+2. python3 train_model.py --auto-label pdf_features.json 
+2. or python3 train_model.py --predict-new pdf_features.json
+2. or python3 train_model.py --prepare pdf_features.json
     
-- open label_me.csv (google sheets) label columns
+3. open label_me.csv (google sheets) label columns
 0:regular content
 1:header/footer
 2:section title/heading
 save file as label_me.csv
     
-- python train_model.py --train label_me.csv
+4. python3 train_model.py --train label_me.csv
 
 to-do:
 - train model for header/footer removal and section idenfitication
@@ -32,5 +33,9 @@ to-do:
 - update cleanup.py functions to take json as input 
 
 Current issues:
+- extraction is causing character level splitting *critical issue*
 - requirements.txt out of date 
+
+training data sources:
+-US Government Publishing Office: https://www.govinfo.gov/
 

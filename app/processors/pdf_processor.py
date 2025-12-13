@@ -141,7 +141,7 @@ def extract_and_parse_pdf(file_bytes: bytes) -> List[Dict[str, Any]]:
                 line["appears_on_most_pages"] = signature_counts[sig] >= (total_pages * 0.6)
 
         end_time = time.perf_counter()
-        logger.debug(f"Processed page {page_num} in {end_time - start_time:.2f} seconds")
+        logger.debug(f"PDF Extracted in  {end_time - start_time:.2f} seconds")
         return all_lines_data
 
     except Exception as e:

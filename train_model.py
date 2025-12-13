@@ -4,7 +4,7 @@ import joblib
 import argparse
 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.model_selection import GridSearchCV 
 from sklearn.metrics import classification_report 
 from app.processors.pdf_processor import extract_and_parse_pdf
@@ -124,7 +124,7 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
     X = df_processed[final_feature_list].fillna(0)
     y = df_processed['label']
     
-    print(f"\nTraining with {len(final_feature_list)} features (after encoding)")
+    print(f"\nTraining with {len(final_feature_list)} features")
     
     #Splitting by index to avoid page-based data leakage (better for generalization)
     test_size = 0.2
@@ -138,15 +138,43 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
     
     # Train model
     model = RandomForestClassifier(
-        n_estimators=100, max_depth=10, min_samples_split=5,
-        min_samples_leaf=2, class_weight='balanced', random_state=42, n_jobs=-1
+        n_estimators=50,      # Conservative for small datasets
+        max_depth=8,          # Shallower trees
+        min_samples_split=10, # Need more samples to split
+        min_samples_leaf=5,   # Bigger leaves
+        class_weight='balanced', 
+        random_state=42, 
+        n_jobs=-1
     )
     
-    print("\nTraining Random Forest...")
+    # Cross-validation before training (helps assess model stability)
+    print("\nRunning 5-fold cross-validation...")
+    cv_scores = cross_val_score(model, X, y, cv=5, scoring='f1_weighted', n_jobs=-1)
+    print(f"CV F1 Score: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+    print(f"Individual folds: {[f'{score:.3f}' for score in cv_scores]}")
+    
+    if cv_scores.std() > 0.10:
+        print("⚠️  High variance detected - model may be unstable")
+    if cv_scores.mean() < 0.70:
+        print("⚠️  Low F1 score - consider adding more labeled data or reviewing features")
+    
+    print("\nTraining Random Forest on full training set...")
     model.fit(X_train, y_train)
     
     # Evaluate
     y_pred = model.predict(X_test)
+    train_acc = model.score(X_train, y_train)
+    test_acc = model.score(X_test, y_test)
+    
+    print("\n" + "="*60)
+    print("MODEL PERFORMANCE")
+    print("="*60)
+    print(f"Training accuracy: {train_acc:.3f}")
+    print(f"Test accuracy:     {test_acc:.3f}")
+    print(f"Accuracy gap:      {train_acc - test_acc:.3f}")
+    
+    if train_acc - test_acc > 0.15:
+        print("⚠️  Large gap detected - model may be overfitting")
     
     print("\n" + "="*60)
     print("CLASSIFICATION REPORT")
@@ -161,10 +189,9 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
     joblib.dump(model, model_output)
     print(f"\n✓ Model saved to {model_output}")
     
-    # Save feature list and categorical metadata (CRITICAL FOR INFERENCE)
+    # Save feature list (CRITICAL FOR INFERENCE)
     ml_metadata = {
-        'model_features': final_feature_list,
-        'ohe_categories': {}
+        'model_features': final_feature_list
     }
     with open('model_metadata.json', 'w') as f:
         json.dump(ml_metadata, f, indent=2)
@@ -181,8 +208,6 @@ def extract_features_from_pdf(pdf_path: str, output_json: str = "pdf_features.js
         pdf_path: Path to PDF file
         output_json: Where to save extracted features
     """
-    # Removed local import since it's now at the top
-    
     print(f"Extracting features from {pdf_path}...")
     
     with open(pdf_path, 'rb') as f:
@@ -197,6 +222,7 @@ def extract_features_from_pdf(pdf_path: str, output_json: str = "pdf_features.js
     print(f"✓ Saved features to {output_json}")
     
     return output_json
+
 
 def auto_label_obvious(features_json_path: str, output_csv: str = "label_me.csv"):
     """
@@ -237,7 +263,7 @@ def auto_label_obvious(features_json_path: str, output_csv: str = "label_me.csv"
     # ---- REGULAR CONTENT (label = 0) ----
     df.loc[df['label'] == -1, 'label'] = 0
 
-    #conver tot string for csv
+    #convert to string for csv
     df['label'] = df['label'].astype(str)
 
     #save back to json
@@ -259,12 +285,91 @@ def auto_label_obvious(features_json_path: str, output_csv: str = "label_me.csv"
     print("\n⚠️  Review labels in the CSV — these are only heuristics.")
 
 
+def auto_label_with_model(pdf_path: str, model_path: str = "document_structure_model.pkl", metadata_path: str = "model_metadata.json", output_csv: str = "label_me_predicted.csv"):
+    """
+    Uses an EXISTING model to auto-label a NEW PDF.
+    Saves the result as a CSV for human review/correction.
+    """
+    import os
+    
+    # 1. Check if model exists
+    if not os.path.exists(model_path) or not os.path.exists(metadata_path):
+        print(f"❌ Model or metadata not found. Train a model first!")
+        return
+
+    # 2. Extract features from the new PDF
+    print(f"Extracting features from {pdf_path}...")
+    
+    with open(pdf_path, 'rb') as f:
+        raw_lines = extract_and_parse_pdf(f.read())
+    
+    df = pd.DataFrame(raw_lines)
+    print(f"Extracted {len(df)} lines.")
+
+    # 3. Load Model and Metadata
+    print("Loading model and metadata...")
+    model = joblib.load(model_path)
+    with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+    
+    required_features = metadata['model_features']
+
+    # 4. Preprocess Features (MUST MATCH TRAINING EXACTLY)
+    
+    # Drop non-numeric/high-cardinality cols (same as training)
+    DROP_FEATURES = ['text_content', 'line_signature']
+    inference_data = df.drop(columns=DROP_FEATURES, errors='ignore')
+    
+    # Align columns: ensure we have exactly the features the model expects
+    # Missing features are filled with 0
+    for feature in required_features:
+        if feature not in inference_data.columns:
+            inference_data[feature] = 0
+    
+    # Select only the required features in the correct order
+    X = inference_data[required_features].fillna(0)
+    
+    # 5. Predict
+    print("Predicting labels...")
+    predicted_labels = model.predict(X)
+    
+    # 6. Save results to CSV for review
+    # We put the predicted label in the first column
+    df['label'] = predicted_labels
+    
+    # Reorder for readability (same logic as prepare_labeling_csv)
+    priority_columns = [
+        'label', 'page_num', 'y_pos_norm', 'text_content', 
+        'font_size', 'is_bold', 'is_all_caps'
+    ]
+    other_columns = [c for c in df.columns if c not in priority_columns]
+    ordered_columns = [col for col in priority_columns if col in df.columns] + other_columns
+    
+    final_df = df[ordered_columns]
+    
+    final_df.to_csv(output_csv, index=False)
+    
+    print(f"\n✓ Generated pre-labeled file: {output_csv}")
+    print(f"  Label distribution:")
+    print(f"    Content (0):       {(predicted_labels == 0).sum()}")
+    print(f"    Header/Footer (1): {(predicted_labels == 1).sum()}")
+    print(f"    Title (2):         {(predicted_labels == 2).sum()}")
+    print(f"\n  Next steps:")
+    print(f"  1. Open {output_csv}")
+    print(f"  2. Review the 'label' column. Correct any mistakes.")
+    print(f"     (0=Content, 1=Header/Footer, 2=Title)")
+    print(f"  3. Save and use for re-training if needed!")
+
+
+
+
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Train document structure classifier")
     parser.add_argument('--extract', type=str, help='Extract features from PDF')
     parser.add_argument('--auto-label', type=str, help='Auto-label JSON features and prepare CSV for manual review.')
+    parser.add_argument('--predict-new', type=str, help='Use TRAINED MODEL to label a new PDF')
     parser.add_argument('--prepare', type=str, help='Prepare CSV for labeling from JSON')
     parser.add_argument('--train', type=str, help='Train model from labeled CSV')
     
@@ -274,13 +379,20 @@ if __name__ == "__main__":
         # Step 1: Extract features from PDF
         json_path = extract_features_from_pdf(args.extract)
         print(f"\nNext: python train_model.py --prepare {json_path}")
+        print(f"Or: python3 train_model.py --auto-label {json_path}")
+        print(f"Or: python3 train_model.py --predict-new {json_path}")
     
     elif args.auto_label:
         # Step 2: Auto-label and Prepare CSV
         # This will call prepare_labeling_csv internally, saving label_me.csv
         auto_label_obvious(args.auto_label)
         print(f"\nNext: 1. Review and refine labels in label_me.csv")
-        print(f"2. Run: python train_model.py --train label_me.csv")
+        print(f"      2. Run: python train_model.py --train label_me.csv")
+    
+    elif args.predict_new:
+        auto_label_with_model(args.predict_new)
+        print(f"\nNext: Review labels in label_me_predicted.csv (optional)")
+        print(f"      Then use for re-training or inference!")
         
     elif args.prepare:
         # Step 2: Prepare CSV for labeling

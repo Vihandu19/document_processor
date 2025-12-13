@@ -60,8 +60,6 @@ async def process_document(
             raw_lines =  extract_and_parse_pdf(contents)
             raw_text = reconstruct_text_from_features(raw_lines)
 
-            if not isinstance(raw_text, list):
-                raise ValueError("Feature extractor did not return a list")
 
             # DEBUG: 
             #logger.info(f"RAW PDF TEXT - First 300 chars: {raw_text[:300]}")
