@@ -29,7 +29,7 @@ model train (ideally 1-50 pages and 200-1k lines)
 3.save file as label_me.csv
 4.repeat 1.-3.3
 
-5. python3 merge_data.py
+5. python3 train_model.py --merge
 6. python3 train_model.py --train master_labeled_data.csv
 
 to-do:

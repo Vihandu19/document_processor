@@ -9,6 +9,72 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.model_selection import GridSearchCV 
 from sklearn.metrics import classification_report 
 from app.processors.pdf_processor import extract_and_parse_pdf
+import glob
+import os
+
+
+def merge_labeled_csvs(input_directory: str = "labeled_data", output_filename: str = "master_labeled_data.csv"):
+    """
+    Finds all CSV files in a directory, merges them into a single DataFrame,
+    and saves the result to a master CSV file.
+    IMPORTANT: Adds 'document_id' and 'source_file' columns to track document origin.
+    """
+    all_files = sorted(glob.glob(os.path.join(input_directory, "*.csv")))
+
+    if not all_files:
+        print(f"❌ Error: No CSV files found in the directory: {input_directory}")
+        return None
+
+    # List to hold individual DataFrames
+    all_dataframes = []
+
+    # Read each CSV file with document tracking
+    for doc_id, filename in enumerate(all_files, start=1):
+        try:
+            # We assume all your labeled CSVs have the same structure
+            df = pd.read_csv(filename)
+            
+            # Important: Filter out any lines that are still unlabeled or blank
+            original_count = len(df)
+            df = df[df['label'].astype(str).str.fullmatch(r'[012]', na=False)]
+            df['label'] = df['label'].astype(int)
+            filtered_count = len(df)
+            
+            # Add document tracking columns
+            df['document_id'] = doc_id
+            df['source_file'] = os.path.basename(filename)
+            
+            all_dataframes.append(df)
+            
+            print(f"Doc {doc_id}: Loaded {filtered_count} labeled lines from: {os.path.basename(filename)}")
+            if original_count != filtered_count:
+                print(f"        ⚠️  Filtered out {original_count - filtered_count} unlabeled/invalid rows")
+            
+        except Exception as e:
+            print(f"⚠️ Warning: Could not read {filename}. Skipping. Error: {e}")
+
+    if not all_dataframes:
+        print(f"❌ Error: No valid data to merge!")
+        return None
+
+    # Concatenate all DataFrames into one
+    master_df = pd.concat(all_dataframes, ignore_index=True)
+
+    # Save the master file
+    master_df.to_csv(output_filename, index=False)
+    
+    # Report totals
+    print("-" * 60)
+    print(f"✅ Merging Complete.")
+    print(f"Total labeled lines: {len(master_df)}")
+    print(f"Total documents: {master_df['document_id'].nunique()}")
+    print(f"\nLabel distribution:")
+    print(master_df['label'].value_counts().sort_index())
+    print(f"\nDocument distribution:")
+    print(master_df['document_id'].value_counts().sort_index())
+    print(f"\nSaved to: {output_filename}")
+    
+    return output_filename
 
 
 def prepare_labeling_csv(features_json_path: str, output_csv: str = "label_me.csv"):
@@ -411,6 +477,7 @@ if __name__ == "__main__":
     parser.add_argument('--auto-label', type=str, help='Auto-label JSON features and prepare CSV for manual review.')
     parser.add_argument('--predict-new', type=str, help='Use TRAINED MODEL to label a new PDF')
     parser.add_argument('--prepare', type=str, help='Prepare CSV for labeling from JSON')
+    parser.add_argument('--merge', type=str, nargs='?', const='labeled_data', help='Merge labeled CSVs from directory (default: labeled_data)')
     parser.add_argument('--train', type=str, help='Train model from labeled CSV')
     
     args = parser.parse_args()
@@ -432,6 +499,12 @@ if __name__ == "__main__":
         auto_label_with_model(args.predict_new)
         print(f"\nNext: Review labels in label_me_predicted.csv (optional)")
         print(f"      Then use for re-training or inference!")
+    
+    elif args.merge is not None:
+        # Merge labeled CSVs
+        output_file = merge_labeled_csvs(args.merge)
+        if output_file:
+            print(f"\nNext: python train_model.py --train {output_file}")
         
     elif args.prepare:
         # Step 2: Prepare CSV for labeling
@@ -445,8 +518,9 @@ if __name__ == "__main__":
         
     else:
         print("Usage:")
-        print("  1. Extract: python train_model.py --extract document.pdf")
+        print("  1. Extract:   python train_model.py --extract document.pdf")
         print("  2. Auto-Label: python train_model.py --auto-label pdf_features.json")
-        print("  3. Prepare: python train_model.py --prepare pdf_features.json")
+        print("  3. Prepare:   python train_model.py --prepare pdf_features.json")
         print("  4. Label manually in Excel/Sheets")
-        print("  5. Train:   python train_model.py --train label_me.csv")
+        print("  5. Merge:     python train_model.py --merge [directory]")
+        print("  6. Train:     python train_model.py --train label_me.csv")
