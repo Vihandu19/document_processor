@@ -3,6 +3,9 @@ This project provides a end-to-end solution for transforming unstructured or mes
 
 The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. Distinguish essential content (Body Text, Headings) from unwanted, repetitive noise (ex.Headers, Footers, and Page Numbers), allowing for intelligent content cleanup that goes far beyond rules based parsing.
 
+Restrictions:
+- LateX based files
+
 Prerequisites:
 - Python 3.8+
 
@@ -23,9 +26,11 @@ model train (ideally 1-50 pages and 200-1k lines)
 0:regular content
 1:header/footer
 2:section title/heading
-save file as label_me.csv
-    
-4. python3 train_model.py --train label_me.csv
+3.save file as label_me.csv
+4.repeat 1.-3.3
+
+5. python3 merge_data.py
+6. python3 train_model.py --train master_labeled_data.csv
 
 to-do:
 - train model for header/footer removal and section idenfitication
@@ -37,5 +42,7 @@ Current issues:
 - requirements.txt out of date 
 
 training data sources:
--US Government Publishing Office: https://www.govinfo.gov/
+filetype:pdf "whitepaper"
+filetype:pdf "user guide"
+filetype:pdf "technical manual"
 

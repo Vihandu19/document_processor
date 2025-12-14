@@ -1,0 +1,30 @@
+{
+  "model_features": [
+    "y_pos_norm",
+    "x_pos_norm",
+    "line_width_norm",
+    "is_centered",
+    "is_top_10_percent",
+    "is_bottom_10_percent",
+    "is_first_page",
+    "is_last_page",
+    "char_count",
+    "word_count",
+    "is_short",
+    "is_very_short",
+    "is_single_word",
+    "font_size",
+    "is_bold",
+    "is_italic",
+    "is_all_caps",
+    "is_title_case",
+    "is_numeric_pattern",
+    "has_page_keyword",
+    "has_date_pattern",
+    "starts_with_number",
+    "ends_with_colon",
+    "signature_frequency",
+    "appears_on_multiple_pages",
+    "appears_on_most_pages"
+  ]
+}

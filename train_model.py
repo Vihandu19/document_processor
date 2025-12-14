@@ -2,6 +2,7 @@ import pandas as pd
 import json
 import joblib
 import argparse
+import numpy as np
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -126,17 +127,56 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
     
     print(f"\nTraining with {len(final_feature_list)} features")
     
-    #Splitting by index to avoid page-based data leakage (better for generalization)
-    test_size = 0.2
-    split_index = int(len(X) * (1 - test_size))
-
-    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
-    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
+    # CRITICAL: Check if we have document_id column for proper splitting
+    if 'document_id' in df_processed.columns:
+        print("\n✓ Found 'document_id' column - using document-level split (RECOMMENDED)")
+        
+        # Get unique document IDs
+        unique_docs = df_processed['document_id'].unique()
+        n_docs = len(unique_docs)
+        
+        # Split documents 80/20
+        test_size = 0.2
+        n_test_docs = max(1, int(n_docs * test_size))
+        n_train_docs = n_docs - n_test_docs
+        
+        # Randomly shuffle documents
+        np.random.seed(42)
+        shuffled_docs = np.random.permutation(unique_docs)
+        
+        train_docs = shuffled_docs[:n_train_docs]
+        test_docs = shuffled_docs[n_train_docs:]
+        
+        # Split data by document
+        train_mask = df_processed['document_id'].isin(train_docs)
+        test_mask = df_processed['document_id'].isin(test_docs)
+        
+        X_train = X[train_mask]
+        X_test = X[test_mask]
+        y_train = y[train_mask]
+        y_test = y[test_mask]
+        
+        print(f"Document-level split:")
+        print(f"  Training: {n_train_docs} documents ({len(X_train)} lines)")
+        print(f"  Test:     {n_test_docs} documents ({len(X_test)} lines)")
+        print(f"  This prevents data leakage from same-document lines!")
+        
+    else:
+        print("\n⚠️  WARNING: No 'document_id' column found!")
+        print("   Using simple index-based split (may cause data leakage)")
+        print("   RECOMMENDATION: Re-merge your data with document_id tracking")
+        
+        # Fallback to index-based splitting
+        test_size = 0.2
+        split_index = int(len(X) * (1 - test_size))
+        
+        X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
+        y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
+        
+        print(f"Training set: {len(X_train)} samples (first {split_index} lines)")
+        print(f"Test set: {len(X_test)} samples (last {len(X) - split_index} lines)")
     
-    print(f"Training set: {len(X_train)} samples (first {split_index} lines)")
-    print(f"Test set: {len(X_test)} samples (last {len(X) - split_index} lines, for better generalization)")
-    
-    # Train model
+    # Train model (OUTSIDE the if/else blocks - runs regardless of split method)
     model = RandomForestClassifier(
         n_estimators=50,      # Conservative for small datasets
         max_depth=8,          # Shallower trees
@@ -378,9 +418,8 @@ if __name__ == "__main__":
     if args.extract:
         # Step 1: Extract features from PDF
         json_path = extract_features_from_pdf(args.extract)
-        print(f"\nNext: python train_model.py --prepare {json_path}")
-        print(f"Or: python3 train_model.py --auto-label {json_path}")
-        print(f"Or: python3 train_model.py --predict-new {json_path}")
+        print(f"\nNext: python train_model.py --auto-label {json_path}")
+        print(f"  Or: python train_model.py --prepare {json_path}")
     
     elif args.auto_label:
         # Step 2: Auto-label and Prepare CSV
