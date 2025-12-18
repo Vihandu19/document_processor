@@ -1,10 +1,82 @@
 # document_processor
 This project provides a end-to-end solution for transforming unstructured or messy documents (specifically PDFs and DOCX files) into clean, structured data formats (json and markdown) suitable for downstream applications like search indexing, data extraction, and analysis.
 
-The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. Distinguish essential content (Body Text, Headings) from unwanted, repetitive noise (ex.Headers, Footers, and Page Numbers), allowing for intelligent content cleanup that goes far beyond rules based parsing.
+The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. Distinguish essential content (Body Text, Headings) from repetitive noise (ex. Headers, Footers, and Page Numbers), allowing for intelligent content cleanup
+
+Sample Json ouput:
+{
+  "version": "1.0",
+  "document_id": "doc_12345",
+
+  "metadata": {
+    "source_type": "pdf",
+    "page_count": 12,
+    "language": "en",
+    "processed_at": "2025-01-01T12:00:00Z"
+  },
+
+  "sections": [
+    {
+      "id": "sec_1",
+      "title": "Introduction",
+      "level": 1,
+      "page_start": 1,
+      "page_end": 2,
+
+      "content": [
+        {
+          "id": "blk_1",
+          "type": "paragraph",
+          "text": "... support@example.com. ...",
+          "page": 1
+        }
+      ],
+
+      "extraction_refs": {
+        "emails": ["email_1"],
+        "phone_numbers": [],
+        "dates": [],
+        "currency": [],
+      }
+    }
+  ],
+
+  "extractions": {
+    "emails": [
+      {
+        "id": "email_1",
+        "value": "support@example.com",
+        "reliability": 0.98,
+        "section_id": "sec_1",
+        "block_id": "blk_1",
+        "page": 1,
+        "source": "regex"
+      }
+    ],
+
+    "phone_numbers": [],
+    "dates": [],
+    "currency": [],
+  },
+
+  "removed": {
+    "headers": [
+      {
+        "text": "Company Confidential",
+        "pages": [...]
+      }
+    ],
+    "footers": [
+      {
+        "text": "Page 1 of 12",
+        "pages": [...]
+      }
+    ]
+  }
+}
 
 Restrictions:
-- LateX based files
+- Scanned/image-only PDFs are not supported
 
 Prerequisites:
 - Python 3.8+
@@ -16,33 +88,10 @@ Service Startup (API)
 - uvicorn app.main:app --reload 
 - The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
 
-model train (ideally 1-50 pages and 200-1k lines)
-1. python3 train_model.py --extract training_docs/document.pdf
-2. python3 train_model.py --auto-label pdf_features.json 
-2. or python3 train_model.py --predict-new pdf_features.json
-2. or python3 train_model.py --prepare pdf_features.json
-    
-3. open label_me.csv (google sheets) label columns
-0:regular content
-1:header/footer
-2:section title/heading
-3.save file as label_me.csv
-4.repeat 1.-3.3
-
-5. python3 train_model.py --merge
-6. python3 train_model.py --train master_labeled_data.csv
-
 to-do:
-- train model for header/footer removal and section idenfitication
-- modify cleantext to use ml instead of rules based 
-- update cleanup.py functions to take json as input 
+- further model training 
 
 Current issues:
-- extraction is causing character level splitting *critical issue*
+- reconstruction is breaking text into paragraphs to aggresivly 
+- (fixed) extraction is causing character level splitting *critical issue*
 - requirements.txt out of date 
-
-training data sources:
-filetype:pdf "whitepaper"
-filetype:pdf "user guide"
-filetype:pdf "technical manual"
-

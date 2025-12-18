@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.model_selection import GridSearchCV 
 from sklearn.metrics import classification_report 
-from app.processors.pdf_processor import extract_and_parse_pdf
+from app.processors.pdf_processor import extract_and_parse_pdf,extract_and_parse_pdf_linebyline
 import glob
 import os
 
@@ -307,27 +307,29 @@ def train_model(labeled_csv_path: str, model_output: str = "document_structure_m
 
 
 def extract_features_from_pdf(pdf_path: str, output_json: str = "pdf_features.json"):
-    """
-    Extract features from a PDF and save to JSON for labeling.
-    
-    Args:
-        pdf_path: Path to PDF file
-        output_json: Where to save extracted features
-    """
     print(f"Extracting features from {pdf_path}...")
-    
+
+    # 1. Read PDF bytes
     with open(pdf_path, 'rb') as f:
-        lines = extract_and_parse_pdf(f.read())
-    
+        pdf_bytes = f.read()
+
+    # 2. Extract features (ONLY here)
+    lines = extract_and_parse_pdf_linebyline(
+        pdf_bytes,
+        x_tolerance=8,
+        y_tolerance=5
+    )
+
     print(f"Extracted {len(lines)} lines")
-    
-    # Save to JSON
-    with open(output_json, 'w') as f:
-        json.dump(lines, f, indent=2)
-    
+
+    # 3. Write JSON safely
+    with open(output_json, 'w', encoding='utf-8') as f:
+        json.dump(lines, f, indent=2, ensure_ascii=False)
+
     print(f"✓ Saved features to {output_json}")
-    
+
     return output_json
+
 
 
 def auto_label_obvious(features_json_path: str, output_csv: str = "label_me.csv"):
@@ -400,14 +402,14 @@ def auto_label_with_model(pdf_path: str, model_path: str = "document_structure_m
     
     # 1. Check if model exists
     if not os.path.exists(model_path) or not os.path.exists(metadata_path):
-        print(f"❌ Model or metadata not found. Train a model first!")
+        print(f"❌ Model or metadata not found. Train a model first")
         return
 
     # 2. Extract features from the new PDF
     print(f"Extracting features from {pdf_path}...")
     
     with open(pdf_path, 'rb') as f:
-        raw_lines = extract_and_parse_pdf(f.read())
+        raw_lines = extract_and_parse_pdf_linebyline(f.read())
     
     df = pd.DataFrame(raw_lines)
     print(f"Extracted {len(df)} lines.")
@@ -483,38 +485,28 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.extract:
-        # Step 1: Extract features from PDF
+        # Extract features from PDF
         json_path = extract_features_from_pdf(args.extract)
-        print(f"\nNext: python train_model.py --auto-label {json_path}")
-        print(f"  Or: python train_model.py --prepare {json_path}")
     
     elif args.auto_label:
-        # Step 2: Auto-label and Prepare CSV
+        # Auto-label and Prepare CSV
         # This will call prepare_labeling_csv internally, saving label_me.csv
         auto_label_obvious(args.auto_label)
-        print(f"\nNext: 1. Review and refine labels in label_me.csv")
-        print(f"      2. Run: python train_model.py --train label_me.csv")
     
     elif args.predict_new:
         auto_label_with_model(args.predict_new)
-        print(f"\nNext: Review labels in label_me_predicted.csv (optional)")
-        print(f"      Then use for re-training or inference!")
     
     elif args.merge is not None:
         # Merge labeled CSVs
         output_file = merge_labeled_csvs(args.merge)
-        if output_file:
-            print(f"\nNext: python train_model.py --train {output_file}")
         
     elif args.prepare:
         # Step 2: Prepare CSV for labeling
         prepare_labeling_csv(args.prepare)
-        print(f"\nNext: python train_model.py --train label_me.csv")
         
     elif args.train:
         # Step 3: Train model
         train_model(args.train)
-        print("\n✓ Training complete! Model is ready to use.")
         
     else:
         print("Usage:")
