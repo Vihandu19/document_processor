@@ -12,24 +12,24 @@ def post_process_text(text: str) -> str:
     if not text:
         return text
 
-    # 1. Dash Normalization (Convert various hyphens/en-dashes to standard dash)
+    #  Dash Normalization 
     text = re.sub(r'[\u2012\u2013\u2014\u2015]', '-', text)
     
-    # 2. Letter-Digit Separation (Fixes "Page12" or "Item5")
+    # Letter-Digit Separation 
     text = re.sub(r'([a-zA-Z])(\d)', r'\1 \2', text)
     text = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
 
-    # 3. Punctuation Spacing
+    # Punctuation Spacing
     text = re.sub(r'\s+([,.!?;:])', r'\1', text) # Remove space before
     text = re.sub(r'([,.!?;:])(?=[a-zA-Z])', r'\1 ', text) # Add space after if followed by char
 
-    # 4. Bracket / Parentheses Cleanup
+    # Bracket / Parentheses Cleanup
     text = re.sub(r'\(\s+', '(', text)
     text = re.sub(r'\s+\)', ')', text)
     text = re.sub(r'\[\s+', '[', text)
     text = re.sub(r'\s+\]', ']', text)
 
-    # 5. Whitespace Normalization
+    # Whitespace Normalization
     text = re.sub(r'\s+', ' ', text)
     
     return text.strip()
@@ -62,9 +62,7 @@ def should_merge_lines(prev_text, prev_bottom, curr_text, curr_top, curr_page, p
 
 
 def reconstruct_document_json(labeled_lines, document_id=None, source_type="pdf", language="en") -> Dict[str, Any]:
-    # ============================================================================
-    # STAGE 1: SEPARATE CONTENT BY LABEL
-    # ============================================================================
+    #SEPARATE CONTENT BY LABEL
     content_lines = []
     header_footer_lines = []
     title_lines = []
@@ -75,9 +73,7 @@ def reconstruct_document_json(labeled_lines, document_id=None, source_type="pdf"
         elif label == 1: header_footer_lines.append(line)
         elif label == 2: title_lines.append(line)
     
-    # ============================================================================
-    # STAGE 2: BUILD SECTIONS WITH SMART PARAGRAPH GROUPING
-    # ============================================================================
+    # BUILD SECTIONS WITH SMART PARAGRAPH GROUPING
     sections = []
     current_section = None
     all_lines_sorted = sorted(content_lines + title_lines, key=lambda x: (x.get('page_num', 0), x.get('y_pos_abs', 0)))
@@ -132,9 +128,7 @@ def reconstruct_document_json(labeled_lines, document_id=None, source_type="pdf"
 
     if current_section: sections.append(current_section)
 
-    # ----------------------------------------------------------------------------
-    # NEW: APPLY POST-PROCESSING CLEANUP
-    # ----------------------------------------------------------------------------
+    # APPLY POST-PROCESSING CLEANUP
     for section in sections:
         section['title'] = post_process_text(section['title'])
         for block in section['content']:
@@ -142,9 +136,8 @@ def reconstruct_document_json(labeled_lines, document_id=None, source_type="pdf"
     
     print(f"Stage 2: Created and post-processed {len(sections)} sections.")
 
-    # ============================================================================
-    # STAGE 3: EXTRACT ENTITIES (Now using cleaned text)
-    # ============================================================================
+    
+    # EXTRACT ENTITIES (Now using cleaned text)
     extractions = {"emails": [], "phone_numbers": [], "dates": [], "currency": []}
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
     phone_pattern = r'\b(?:\+?1[-.]?)?\(?([0-9]{3})\)?[-.]?([0-9]{3})[-.]?([0-9]{4})\b'
@@ -181,9 +174,8 @@ def reconstruct_document_json(labeled_lines, document_id=None, source_type="pdf"
                 extractions["currency"].append({"id": ext_id, "value": match.group(0), "reliability": 0.92, "section_id": section['id'], "block_id": block['id'], "page": block['page'], "source": "regex"})
                 section['extraction_refs']['currency'].append(ext_id)
 
-    # ============================================================================
+    
     # STAGE 4: PROCESS REMOVED CONTENT
-    # ============================================================================
     headers_by_text = defaultdict(list)
     footers_by_text = defaultdict(list)
     for line in header_footer_lines:
@@ -196,9 +188,7 @@ def reconstruct_document_json(labeled_lines, document_id=None, source_type="pdf"
         "footers": [{"text": t, "pages": sorted(set(p)), "frequency": len(p)} for t, p in footers_by_text.items()]
     }
 
-    # ============================================================================
-    # STAGE 5: ASSEMBLE FINAL JSON
-    # ============================================================================
+    #ASSEMBLE FINAL JSON
     all_pages = [l.get('page_num', 1) for l in labeled_lines]
     
     return {

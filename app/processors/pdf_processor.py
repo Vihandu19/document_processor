@@ -52,7 +52,7 @@ def pre_process_text(text: str) -> str:
 
     return text
 
-
+#(V3) Extract text and features from PDF file line by line
 def extract_and_parse_pdf_linebyline(
     file_bytes: bytes,
     x_tolerance: float = 8,
@@ -186,7 +186,7 @@ def extract_and_parse_pdf_linebyline(
         logger.exception("PDF extraction failed")
         return []
 
-
+#(V2)extract text and features from PDF file
 def extract_and_parse_pdf(pdf_path: str) -> List[Dict]:
     all_lines_data = []
     start_time = time.perf_counter()
@@ -234,7 +234,7 @@ def extract_and_parse_pdf(pdf_path: str) -> List[Dict]:
         return []
 
 
-# Extract text from PDF file
+# (V2) Extract text from PDF file
 def parse_pdf(file_contents: bytes) -> str:
     try:
         pdf_file = BytesIO(file_contents)

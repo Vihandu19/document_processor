@@ -64,7 +64,7 @@ async def process_document(
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     try:
-        # Step 1: Read file bytes
+        # Read file bytes
         contents = await file.read()
         file_size_mb = len(contents) / (1024 * 1024)
         
@@ -78,7 +78,7 @@ async def process_document(
         
         logger.info(f"Processing {file.filename} ({file_size_mb:.2f}MB)")
         
-        # Step 2: Line-by-Line Extraction
+        # Line-by-Line Extraction
         lines_data = extract_and_parse_pdf_linebyline(contents)
         
         if not lines_data:
@@ -89,7 +89,7 @@ async def process_document(
         
         logger.info(f"Extracted {len(lines_data)} lines from {file.filename}")
 
-        # Step 3: Prepare Data for ML Prediction
+        # Prepare Data for ML Prediction
         df = pd.DataFrame(lines_data)
         
         #  Ensure all required features exist Use the features loaded from model_metadata.json
@@ -124,13 +124,13 @@ async def process_document(
             source_type="pdf"
         )
 
-        # Step 5: Generate Markdown if requested
+        #  Generate Markdown if requested
         markdown_output = None
         if output_format in ["markdown", "both"]:
             markdown_output = convert_to_markdown(reconstructed_json)
             logger.info(f"Generated markdown ({len(markdown_output)} chars)")
 
-        # Step 6: Build Response
+        # Build Response
         # Unpack the reconstructed_json dict into the response model
         response = DocumentResponse(
             filename=file.filename,
