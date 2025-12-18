@@ -1,20 +1,21 @@
 # document_processor
-This project provides a end-to-end solution for transforming unstructured or messy documents (specifically PDFs and DOCX files) into clean, structured data formats (json and markdown) suitable for downstream applications like search indexing, data extraction, and analysis.
 
-The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. Distinguish essential content (Body Text, Headings) from repetitive noise (ex. Headers, Footers, and Page Numbers), allowing for intelligent content cleanup
+This project provides an end-to-end solution for transforming unstructured or messy documents (specifically PDFs and DOCX files) into clean, structured data formats (JSON and Markdown) suitable for downstream applications such as search indexing, data extraction, and analysis.
 
-Sample Json ouput:
+The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. It distinguishes essential content (body text, headings) from repetitive noise (e.g., headers, footers, and page numbers), allowing for intelligent content cleanup.
+
+## Sample JSON Output
+
+```json
 {
   "version": "1.0",
   "document_id": "doc_12345",
-
   "metadata": {
     "source_type": "pdf",
     "page_count": 12,
     "language": "en",
     "processed_at": "2025-01-01T12:00:00Z"
   },
-
   "sections": [
     {
       "id": "sec_1",
@@ -22,25 +23,22 @@ Sample Json ouput:
       "level": 1,
       "page_start": 1,
       "page_end": 2,
-
       "content": [
         {
           "id": "blk_1",
           "type": "paragraph",
-          "text": "... support@example.com. ...",
+          "text": "... support@example.com ...",
           "page": 1
         }
       ],
-
       "extraction_refs": {
         "emails": ["email_1"],
         "phone_numbers": [],
         "dates": [],
-        "currency": [],
+        "currency": []
       }
     }
   ],
-
   "extractions": {
     "emails": [
       {
@@ -53,45 +51,56 @@ Sample Json ouput:
         "source": "regex"
       }
     ],
-
     "phone_numbers": [],
     "dates": [],
-    "currency": [],
+    "currency": []
   },
-
   "removed": {
     "headers": [
       {
         "text": "Company Confidential",
-        "pages": [...]
+        "pages": []
       }
     ],
     "footers": [
       {
         "text": "Page 1 of 12",
-        "pages": [...]
+        "pages": []
       }
     ]
   }
 }
+```
 
-Restrictions:
-- Scanned/image-only PDFs are not supported
+## Restrictions
 
-Prerequisites:
-- Python 3.8+
+* Scanned or image-only PDFs are not supported
 
-Environment Activation
-- source venv/bin/activate
+## Prerequisites
 
-Service Startup (API)
-- uvicorn app.main:app --reload 
-- The API will be accessible at http://127.0.0.1:8000. You can interact with the documentation interface at http://127.0.0.1:8000/docs.
+* Python 3.8+
 
-to-do:
-- further model training 
+## Environment Activation
 
-Current issues:
-- reconstruction is breaking text into paragraphs to aggresivly 
-- (fixed) extraction is causing character level splitting *critical issue*
-- requirements.txt out of date 
+```bash
+source venv/bin/activate
+```
+
+## Service Startup (API)
+
+```bash
+uvicorn app.main:app --reload
+```
+
+* The API will be accessible at [http://127.0.0.1:8000](http://127.0.0.1:8000)
+* Interactive docs available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+## To-Do
+
+* Further model training
+
+## Current Issues
+
+* Reconstruction is breaking text into paragraphs too aggressively
+* (Fixed) extraction was causing character-level splitting (critical issue)
+* requirements.txt is out of date
