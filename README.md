@@ -95,6 +95,43 @@ uvicorn app.main:app --reload
 * The API will be accessible at [http://127.0.0.1:8000](http://127.0.0.1:8000)
 * Interactive docs available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
+## Calling the API
+
+Below is a minimal example showing how to call the API once the service is running.
+
+### Example using `curl`
+
+```bash
+curl -X POST "http://127.0.0.1:8000/process" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_id": "doc_12345",
+    "source_type": "pdf",
+    "content": "<base64-encoded file or raw text>"
+  }'
+```
+
+### Example using Python (`requests`)
+
+```python
+import requests
+
+url = "http://127.0.0.1:8000/process"
+
+payload = {
+    "document_id": "doc_12345",
+    "source_type": "pdf",
+    "content": "<base64-encoded file or raw text>"
+}
+
+response = requests.post(url, json=payload)
+response.raise_for_status()
+
+print(response.json())
+```
+
+Refer to the OpenAPI documentation at `/docs` for the full request/response schema and available parameters.
+
 ## To-Do
 
 * Further model training
