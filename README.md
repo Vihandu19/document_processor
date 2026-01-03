@@ -4,76 +4,38 @@ This project provides an end-to-end solution for transforming unstructured or me
 
 The core innovation is the use of a Machine Learning (ML) classifier to accurately determine the structural role of every line of text. It distinguishes essential content (body text, headings) from repetitive noise (e.g., headers, footers, and page numbers), allowing for intelligent content cleanup.
 
-## Sample JSON Output
+## Sample Output: List of chunks in this format 
 
-```json
 {
-  "version": "1.0",
-  "document_id": "doc_12345",
-  "metadata": {
-    "source_type": "pdf",
-    "page_count": 12,
-    "language": "en",
-    "processed_at": "2025-01-01T12:00:00Z"
-  },
-  "sections": [
+  "document_id": "service_agreement_v2.pdf",
+  "status": "success",
+  "chunks": [
     {
-      "id": "sec_1",
-      "title": "Introduction",
-      "level": 1,
-      "page_start": 1,
-      "page_end": 2,
-      "content": [
-        {
-          "id": "blk_1",
-          "type": "paragraph",
-          "text": "... support@example.com ...",
-          "page": 1
-        }
-      ],
-      "extraction_refs": {
-        "emails": ["email_1"],
-        "phone_numbers": [],
-        "dates": [],
-        "currency": []
+      "chunk_id": "service_agreement_v2.pdf_sec2_p0",
+      "text": "The Consultant shall be paid a total fee of 5,500.00 USD for the services provided. This payment is due no later than 2024-12-31 and includes all applicable taxes and administrative costs.",
+      "metadata": {
+        "document_id": "service_agreement_v2.pdf",
+        "section_title": "3. Payment Terms",
+        "section_path": [
+          "EXHIBIT A: STATEMENT OF WORK",
+          "3. Payment Terms"
+        ],
+        "currency": ["USD"],
+        "amounts": [5500.0),
+        "Dates": ["2024-12-31"],
+        "document_type": "contract"
+      },
+      "anchors": {
+        "page_range": [3, 3],
+        "line_refs": [442, 443, 444]
       }
     }
-  ],
-  "extractions": {
-    "emails": [
-      {
-        "id": "email_1",
-        "value": "support@example.com",
-        "reliability": 0.98,
-        "section_id": "sec_1",
-        "block_id": "blk_1",
-        "page": 1,
-        "source": "regex"
-      }
-    ],
-    "phone_numbers": [],
-    "dates": [],
-    "currency": []
-  },
-  "removed": {
-    "headers": [
-      {
-        "text": "Company Confidential",
-        "pages": []
-      }
-    ],
-    "footers": [
-      {
-        "text": "Page 1 of 12",
-        "pages": []
-      }
-    ]
-  }
+  ]
 }
-```
 
 ## Restrictions
 
+* Text box based files
 * Scanned or image-only PDFs are not supported
 
 ## Prerequisites

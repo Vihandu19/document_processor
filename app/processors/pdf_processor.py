@@ -60,12 +60,12 @@ def extract_and_parse_pdf_linebyline(
 ) -> List[Dict[str, Any]]:
     """
     Extract text-line features from a PDF using a hybrid approach:
-
-    - extract_text_lines(): layout, geometry, font, repetition
-    - extract_words(): reliable word boundaries and spacing
-
-    This handles LaTeX-generated PDFs correctly while preserving layout features
-    for ML-based structural classification.
+    
+    1. Line Extraction: Uses layout analysis to group text.
+    2. Word Reconstruction: Uses individual words to fix spacing issues.
+    3. Feature Engineering: Adds geometrical, repetition, and CONTEXTUAL features.
+    
+    Returns a list of feature dictionaries (one per line).
     """
     start_time = time.perf_counter()
     pdf_file = BytesIO(file_bytes)
@@ -75,6 +75,7 @@ def extract_and_parse_pdf_linebyline(
         with pdfplumber.open(pdf_file) as pdf:
             total_pages = len(pdf.pages)
 
+            # --- PASS 1: EXTRACT LINES AND BASIC FEATURES ---
             for page_num, page in enumerate(pdf.pages):
                 # Layout-based line detection
                 lines = page.extract_text_lines(
@@ -84,7 +85,7 @@ def extract_and_parse_pdf_linebyline(
                     y_tolerance=y_tolerance,
                 )
 
-                # Word extraction for correct spacing
+                # Word extraction for correct spacing reconstruction
                 words = page.extract_words(
                     use_text_flow=True,
                     keep_blank_chars=False,
@@ -93,38 +94,42 @@ def extract_and_parse_pdf_linebyline(
                 )
 
                 for line in lines:
-                    # Prefer word-based reconstruction
+                    # Helper: Reconstruct text from words to fix LaTeX spacing
                     text = reconstruct_line_from_words(line, words)
-
+                    
+                    # Fallback if reconstruction fails
                     if not text:
                         text = line.get("text", "").strip()
 
-                    #pre processing normalization
+                    # Helper: Unicode normalization
                     text = pre_process_text(text)
 
-                    # Skip empty or noise lines
-                    if not text or (len(text) == 1 and text.isalpha()):
+                    # Skip empty or noise lines (e.g., single stray characters)
+                    if not text or (len(text) == 1 and not text.isalnum()):
                         continue
 
-                    x0 = line["x0"]
-                    x1 = line["x1"]
-                    top = line["top"]
-
+                    # Geometry
+                    x0, x1, top = line["x0"], line["x1"], line["top"]
+                    
+                    # Font extraction (Handle cases where chars might be missing)
                     chars = line.get("chars", [])
                     if chars:
+                        # Use the most common font in the line to avoid outlier chars
+                        # (e.g. a single bold char in a regular sentence)
                         fontname = chars[0].get("fontname", "UNKNOWN")
                         font_size = chars[0].get("size", 10.0)
                     else:
                         fontname = "UNKNOWN"
                         font_size = 10.0
 
+                    # BASE FEATURES (Per-Line)
                     features = {
                         # Identifiers
                         "page_num": page_num + 1,
                         "line_signature": f"{round(top, 0)}_{fontname}_{round(font_size, 1)}",
                         "text_content": text,
 
-                        # Layout features
+                        # Geometry & Layout
                         "x0": x0,
                         "x1": x1,
                         "y_pos_abs": top,
@@ -132,43 +137,41 @@ def extract_and_parse_pdf_linebyline(
                         "page_width": page.width,
                         "y_pos_norm": top / page.height,
                         "x_pos_norm": x0 / page.width,
-                        "line_width": x1 - x0,
                         "line_width_norm": (x1 - x0) / page.width,
                         "is_centered": abs((x0 + x1) / 2 - page.width / 2) < (page.width * 0.1),
-
-                        # Text features
+                        
+                        # Text Stats
                         "char_count": len(text),
                         "word_count": len(text.split()),
                         "is_short": len(text) < 30,
                         "is_very_short": len(text) < 10,
                         "is_single_word": len(text.split()) == 1,
 
-                        # Typographic features
+                        # Typography
                         "fontname": fontname,
                         "font_size": font_size,
                         "is_bold": "bold" in fontname.lower(),
                         "is_italic": "italic" in fontname.lower(),
-
-                        # Content features
                         "is_all_caps": text.isupper() and len(text) > 2,
                         "is_title_case": text.istitle(),
+
+                        # Regex Patterns
                         "is_numeric_pattern": bool(regex.match(r"^\s*[\(\[]?\s*\d+\s*[\)\]]?\s*$", text)),
                         "has_page_keyword": bool(regex.search(r"\bpage\b", text, regex.IGNORECASE)),
                         "has_date_pattern": bool(regex.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", text)),
                         "starts_with_number": bool(regex.match(r"^\d+[\.)]\s", text)),
                         "ends_with_colon": text.endswith(":"),
 
-                        # Positional features
+                        # Position
                         "is_top_10_percent": (top / page.height) < 0.1,
                         "is_bottom_10_percent": (top / page.height) > 0.9,
                         "is_first_page": page_num == 0,
                         "is_last_page": page_num == total_pages - 1,
                     }
-
                     all_lines_data.append(features)
 
-            # Repetition / header-footer features
-            signature_counts: Dict[str, int] = {}
+            # count how many times exact line signatures appear across the doc
+            signature_counts = {}
             for line in all_lines_data:
                 sig = line["line_signature"]
                 signature_counts[sig] = signature_counts.get(sig, 0) + 1
@@ -178,13 +181,61 @@ def extract_and_parse_pdf_linebyline(
                 line["signature_frequency"] = signature_counts[sig]
                 line["appears_on_multiple_pages"] = signature_counts[sig] > 1
                 line["appears_on_most_pages"] = signature_counts[sig] >= (total_pages * 0.6)
+            
+            # Calculate global average font size to normalize "bigness"
+            if all_lines_data:
+                avg_font_size = sum(l['font_size'] for l in all_lines_data) / len(all_lines_data)
+            else:
+                avg_font_size = 10.0
 
-        logger.debug(f"PDF extracted in {time.perf_counter() - start_time:.2f}s")
+            for i, line in enumerate(all_lines_data):
+                # 1. Relative Font Size
+                # (How much bigger is this than the document average?)
+                line["font_size_rel"] = line["font_size"] / avg_font_size
+                
+                # Get neighbors (safely handling start/end of list)
+                prev_line = all_lines_data[i - 1] if i > 0 else None
+                next_line = all_lines_data[i + 1] if i < len(all_lines_data) - 1 else None
+                
+                # 2. Previous Line Signals
+                if prev_line:
+                    # Did the previous line look like the end of a sentence?
+                    # If False, this line is likely a continuation (Label 0), not a Title (Label 2)
+                    line["prev_ends_punctuation"] = prev_line["text_content"].strip().endswith(('.', '!', '?', ':'))
+                    
+                    # Formatting changes
+                    line["font_size_change_prev"] = line["font_size"] - prev_line["font_size"]
+                    line["is_different_style_prev"] = line["fontname"] != prev_line["fontname"]
+                    
+                    # Vertical distance (Handling page breaks)
+                    if prev_line["page_num"] == line["page_num"]:
+                        line["dist_from_prev"] = line["y_pos_abs"] - (prev_line["y_pos_abs"] + prev_line["font_size"])
+                    else:
+                        line["dist_from_prev"] = 100.0  # Large distance for new page
+                else:
+                    # Defaults for the very first line of the doc
+                    line["prev_ends_punctuation"] = True
+                    line["font_size_change_prev"] = 0
+                    line["is_different_style_prev"] = False
+                    line["dist_from_prev"] = 0
+
+                # 3. Next Line Signals
+                if next_line:
+                    # Does the next line start with a lowercase?
+                    # If True, this line is almost certainly NOT a Title (it's the start of a sentence)
+                    cleaned_next = next_line["text_content"].strip()
+                    line["next_starts_lower"] = cleaned_next[0].islower() if cleaned_next else False
+                else:
+                    line["next_starts_lower"] = False
+
+        logger.info(f"PDF processed: {len(all_lines_data)} lines extracted in {time.perf_counter() - start_time:.2f}s")
         return all_lines_data
 
     except Exception as e:
         logger.exception("PDF extraction failed")
+        # Return empty list so the pipeline doesn't crash completely
         return []
+
 
 #(V2)extract text and features from PDF file
 def extract_and_parse_pdf(pdf_path: str) -> List[Dict]:

@@ -1,4 +1,7 @@
 Internal Training pipeline (data ideally 1-50 pages and 200-1k lines)
+0. python train_model.py --download-data
+0. python train_model.py --clean ./training_data/raw_pdfs --max-pages 5
+
 1. python3 train_model.py --extract training_docs/training_data.pdf
 1. or python3 train_model.py --predict-new training_docs/training_data.pdf (skip to step 3) 
 
